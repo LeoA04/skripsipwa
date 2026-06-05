@@ -1,0 +1,193 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "./client"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+model categories {
+  id         Int          @id @default(autoincrement())
+  name       String       @db.VarChar(100)
+  menu_items menu_items[]
+}
+
+model feedback {
+  id           Int        @id @default(autoincrement())
+  order_id     Int
+  menu_item_id Int
+  rating       Int?
+  review_text  String?    @db.Text
+  created_at   DateTime   @default(now()) @db.Timestamp(0)
+  orders       orders     @relation(fields: [order_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "feedback_ibfk_1")
+  menu_items   menu_items @relation(fields: [menu_item_id], references: [id], onUpdate: Restrict, map: "feedback_ibfk_2")
+
+  @@index([menu_item_id], map: "menu_item_id")
+  @@index([order_id], map: "order_id")
+}
+
+model legacy_print_queue {
+  id           Int                              @id @default(autoincrement())
+  order_id_pwa Int
+  table_number Int
+  total_amount Decimal                          @db.Decimal(10, 2)
+  status_print legacy_print_queue_status_print? @default(belum_print)
+  created_at   DateTime                         @default(now()) @db.Timestamp(0)
+  orders       orders                           @relation(fields: [order_id_pwa], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "legacy_print_queue_ibfk_1")
+
+  @@index([order_id_pwa], map: "order_id_pwa")
+}
+
+model menu_items {
+  id          Int                @id @default(autoincrement())
+  category_id Int?
+  name        String             @db.VarChar(150)
+  description String?            @db.Text
+  price       Decimal            @db.Decimal(10, 2)
+  image_url   String?            @db.VarChar(255)
+  status      menu_items_status? @default(ready)
+  feedback    feedback[]
+  categories  categories?        @relation(fields: [category_id], references: [id], onUpdate: Restrict, map: "menu_items_ibfk_1")
+  order_items order_items[]
+  recipe_bom  recipe_bom[]
+
+  @@index([category_id], map: "category_id")
+}
+
+model order_items {
+  id           Int        @id @default(autoincrement())
+  order_id     Int
+  menu_item_id Int
+  quantity     Int
+  notes        String?    @db.VarChar(255)
+  orders       orders     @relation(fields: [order_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "order_items_ibfk_1")
+  menu_items   menu_items @relation(fields: [menu_item_id], references: [id], onUpdate: Restrict, map: "order_items_ibfk_2")
+
+  @@index([menu_item_id], map: "menu_item_id")
+  @@index([order_id], map: "order_id")
+}
+
+model orders {
+  id                 Int                  @id @default(autoincrement())
+  table_id           Int
+  status             orders_status?       @default(pending)
+  subtotal           Decimal              @default(0.00) @db.Decimal(10, 2)
+  promo_id           Int?
+  discount_amount    Decimal?             @default(0.00) @db.Decimal(10, 2)
+  final_total        Decimal              @default(0.00) @db.Decimal(10, 2)
+  created_at         DateTime             @default(now()) @db.Timestamp(0)
+  feedback           feedback[]
+  legacy_print_queue legacy_print_queue[]
+  order_items        order_items[]
+  tables             tables               @relation(fields: [table_id], references: [id], onUpdate: Restrict, map: "orders_ibfk_1")
+  promotions         promotions?          @relation(fields: [promo_id], references: [id], onUpdate: Restrict, map: "orders_ibfk_2")
+
+  @@index([promo_id], map: "promo_id")
+  @@index([table_id], map: "table_id")
+}
+
+model promotions {
+  id           Int             @id @default(autoincrement())
+  name         String          @db.VarChar(100)
+  type         promotions_type
+  value        Decimal         @db.Decimal(10, 2)
+  min_purchase Decimal?        @default(0.00) @db.Decimal(10, 2)
+  is_active    Boolean?        @default(true)
+  orders       orders[]
+}
+
+model raw_materials {
+  id              Int                @id @default(autoincrement())
+  name            String             @db.VarChar(150)
+  unit            raw_materials_unit
+  current_stock   Decimal            @default(0.00) @db.Decimal(10, 2)
+  min_stock_alert Decimal            @default(0.00) @db.Decimal(10, 2)
+  recipe_bom      recipe_bom[]
+}
+
+model recipe_bom {
+  id                Int           @id @default(autoincrement())
+  menu_item_id      Int
+  raw_material_id   Int
+  quantity_required Decimal       @db.Decimal(10, 2)
+  menu_items        menu_items    @relation(fields: [menu_item_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "recipe_bom_ibfk_1")
+  raw_materials     raw_materials @relation(fields: [raw_material_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "recipe_bom_ibfk_2")
+
+  @@index([menu_item_id], map: "menu_item_id")
+  @@index([raw_material_id], map: "raw_material_id")
+}
+
+model reservations {
+  id               Int                       @id @default(autoincrement())
+  customer_name    String                    @db.VarChar(150)
+  customer_phone   String                    @db.VarChar(20)
+  reservation_date DateTime                  @db.DateTime(0)
+  pax_count        Int
+  buffer_pax       Int?                      @default(5)
+  budget_type      reservations_budget_type? @default(paket_standar)
+  status           reservations_status?      @default(pending_wa)
+  created_at       DateTime                  @default(now()) @db.Timestamp(0)
+}
+
+model tables {
+  id           Int      @id @default(autoincrement())
+  table_number Int      @unique(map: "table_number")
+  qr_code_url  String?  @db.VarChar(255)
+  orders       orders[]
+}
+
+model users {
+  id            Int        @id @default(autoincrement())
+  username      String     @unique(map: "username") @db.VarChar(50)
+  password_hash String     @db.VarChar(255)
+  role          users_role
+  created_at    DateTime   @default(now()) @db.Timestamp(0)
+}
+
+enum orders_status {
+  pending
+  preparing
+  ready
+  served
+  paid
+}
+
+enum promotions_type {
+  percent
+  nominal
+}
+
+enum raw_materials_unit {
+  gram
+  ml
+  pcs
+}
+
+enum users_role {
+  admin
+  waiter
+  kasir
+}
+
+enum legacy_print_queue_status_print {
+  belum_print
+  sudah_print
+}
+
+enum menu_items_status {
+  ready
+  habis
+}
+
+enum reservations_budget_type {
+  paket_standar
+  custom_budget
+}
+
+enum reservations_status {
+  pending_wa
+  confirmed
+  completed
+  cancelled
+}
