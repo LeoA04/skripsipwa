@@ -3,7 +3,8 @@ import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom'
 import axios from 'axios'
 import './App.css'
 
-const API_URL = `http://${window.location.hostname}:3000`;
+// Menggunakan Environment Variable agar aman saat di-deploy (Vercel)
+const API_URL = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:3000`;
 
 const playNotificationSound = () => {
   const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
