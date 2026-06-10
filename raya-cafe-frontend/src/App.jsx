@@ -2,43 +2,36 @@ import { useState, useEffect, useRef } from 'react'
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom'
 import axios from 'axios'
 import './App.css'
-
+import rcmLogo from './assets/rcm.png'
 // Menggunakan Environment Variable agar aman saat di-deploy (Vercel)
 const API_URL = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:3000`;
-
 const playNotificationSound = () => {
   const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
   audio.play().catch(e => console.log("Audio play di-block browser", e));
 };
-
 // 1. DASHBOARD PWA PELANGGAN
 function CustomerApp() {
   const [menus, setMenus] = useState([]); const [filteredMenus, setFilteredMenus] = useState([]); const [categoriesList, setCategoriesList] = useState(['Semua']); const [cart, setCart] = useState([]); const [category, setCategory] = useState('Semua'); const [isCartOpen, setIsCartOpen] = useState(false); const [checkoutSuccess, setCheckoutSuccess] = useState(false); const [nomorMeja, setNomorMeja] = useState(1);
   const [lastOrderItems, setLastOrderItems] = useState([]); const [lastOrderId, setLastOrderId] = useState(null); const [feedbackData, setFeedbackData] = useState({});
-
   useEffect(() => {
     const params = new URLSearchParams(window.location.search); const mejaDariUrl = params.get('meja'); if (mejaDariUrl) setNomorMeja(parseInt(mejaDariUrl));
     axios.get(`${API_URL}/api/categories`).then(res => setCategoriesList(['Semua', ...res.data.map(c => c.name)])).catch(err => console.log(err));
     axios.get(`${API_URL}/api/menu`).then(res => { setMenus(res.data); setFilteredMenus(res.data); }).catch(err => console.log(err));
   }, []);
-
   const filterCategory = (cat) => { setCategory(cat); setFilteredMenus(cat === 'Semua' ? menus : menus.filter(m => m.categories?.name === cat)); }
   const updateQuantity = (item, qtyDelta) => { const existing = cart.find(c => c.id === item.id); if (existing) { const newQty = existing.qty + qtyDelta; setCart(newQty <= 0 ? cart.filter(c => c.id !== item.id) : cart.map(c => c.id === item.id ? { ...c, qty: newQty } : c)); } else if (qtyDelta > 0) setCart([...cart, { ...item, qty: 1, notes: '' }]); }
   const updateItemNote = (itemId, note) => setCart(cart.map(c => c.id === itemId ? { ...c, notes: note } : c));
   const getItemQuantity = (itemId) => { const item = cart.find(c => c.id === itemId); return item ? item.qty : 0; }
-
   const totalItems = cart.reduce((sum, item) => sum + item.qty, 0); const finalTotal = cart.reduce((sum, item) => sum + (item.price * item.qty), 0); const originalTotal = cart.reduce((sum, item) => sum + (item.original_price * item.qty), 0);
-
   const handleCheckout = () => {
     axios.post(`${API_URL}/api/checkout`, { table_id: nomorMeja, items: cart.map(item => ({ menu_item_id: item.id, quantity: item.qty, notes: item.notes })) })
       .then((res) => { setLastOrderId(res.data.data.id); setLastOrderItems(cart); setCart([]); setIsCartOpen(false); setCheckoutSuccess(true); }).catch(err => alert('Gagal Checkout: ' + (err.response?.data?.error || err.message)));
   }
   const submitFeedback = () => {
-    const feedbacks = Object.keys(feedbackData).map(menuId => ({ menu_item_id: menuId, rating: feedbackData[menuId].rating || 5, review_text: feedbackData[menuId].review || '' }));
+    const feedbacks = Object.keys(feedbackData).map(menuId => ({ menu_item_id: parseInt(menuId), rating: feedbackData[menuId].rating || 5, review_text: feedbackData[menuId].review || '' }));
     if (feedbacks.length === 0) return alert("Beri rating minimal 1 menu.");
     axios.post(`${API_URL}/api/feedback`, { order_id: lastOrderId, feedbacks }).then(() => { alert("Terima kasih!"); setCheckoutSuccess(false); setFeedbackData({}); }).catch(err => alert("Gagal."));
   };
-
   if (checkoutSuccess) {
     return (
       <div className="app-container"><header className="header confirmation-header"><h2>Pesanan Berhasil!</h2></header>
@@ -50,7 +43,6 @@ function CustomerApp() {
       </div>
     )
   }
-
   if (isCartOpen) {
     return (
       <div className="app-container"><header className="header cart-header"><button className="back-btn" onClick={() => setIsCartOpen(false)}>❮</button><h2>Keranjang Anda</h2></header>
@@ -61,9 +53,8 @@ function CustomerApp() {
       </div>
     )
   }
-
   return (
-    <div className="app-container"><header className="header"><h1>Raya Cafe Madiun</h1><p>Self-Order Meja {nomorMeja}</p><div className="category-tabs">{categoriesList.map(cat => <button key={cat} className={category === cat ? 'active-tab' : 'tab'} onClick={() => filterCategory(cat)}>{cat}</button>)}</div></header>
+    <div className="app-container"><header className="header"><div style={{ display: 'flex', alignItems: 'center', gap: '10px', justifyContent: 'center' }}><img src={rcmLogo} alt="Raya Cafe Logo" style={{ height: '48px', width: '48px', objectFit: 'contain', borderRadius: '50%', boxShadow: '0 2px 8px rgba(0,0,0,0.18)' }} /><div><h1>Raya Cafe Madiun</h1><p>Self-Order Meja {nomorMeja}</p></div></div><div className="category-tabs">{categoriesList.map(cat => <button key={cat} className={category === cat ? 'active-tab' : 'tab'} onClick={() => filterCategory(cat)}>{cat}</button>)}</div></header>
       <div className="menu-grid">{filteredMenus.map(menu => {
         const qtyInCart = getItemQuantity(menu.id); const isDiscounted = menu.original_price > menu.price;
         return (<div key={menu.id} className="menu-card"><div style={{ display: 'flex', justifyContent: 'space-between' }}><span className="badge">{menu.categories?.name || 'Menu'}</span>{isDiscounted && <span className="badge-promo">Diskon!</span>}</div><h3>{menu.name}</h3><p className="description">{menu.description}</p><div className="card-footer-row"><div className="price-container">{isDiscounted && <p className="original-price">Rp {menu.original_price.toLocaleString('id-ID')}</p>}<p className="price">Rp {menu.price.toLocaleString('id-ID')}</p></div>{qtyInCart > 0 ? (<div className="qty-control-btn"><button onClick={() => updateQuantity(menu, -1)}>−</button><span>{qtyInCart}</span><button onClick={() => updateQuantity(menu, 1)}>+</button></div>) : <button className="add-btn" onClick={() => updateQuantity(menu, 1)}>Tambah</button>}</div></div>);
@@ -72,42 +63,33 @@ function CustomerApp() {
     </div>
   )
 }
-
 // 2. DASHBOARD ADMIN
 function AdminDashboard() {
   const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('token'));
   const [username, setUsername] = useState(localStorage.getItem('username') || '');
   const [password, setPassword] = useState('');
   const [userRole, setUserRole] = useState(localStorage.getItem('userRole') || '');
-
   const [activeTab, setActiveTab] = useState('orders');
   const [orders, setOrders] = useState([]); const [reservations, setReservations] = useState([]); const [inventory, setInventory] = useState([]); const [menus, setMenus] = useState([]); const [packages, setPackages] = useState([]); const [promotions, setPromotions] = useState([]); const [feedbacks, setFeedbacks] = useState([]); const [usersList, setUsersList] = useState([]); const [tables, setTables] = useState([]);
-
   const [reportDate, setReportDate] = useState(new Date().toISOString().split('T')[0]); const [reportData, setReportData] = useState(null);
-
   const [showResvModal, setShowResvModal] = useState(false);
   const [selectedResv, setSelectedResv] = useState(null);
   const [selectedTableId, setSelectedTableId] = useState('');
-
   const [eventMode, setEventMode] = useState('paket');
   const [selectedPackageId, setSelectedPackageId] = useState('');
   const [eventMenuDropdown, setEventMenuDropdown] = useState('');
   const [eventCart, setEventCart] = useState([]);
-
   const [showManualResv, setShowManualResv] = useState(false);
   const [manualResvForm, setManualResvForm] = useState({ name: '', phone: '', date: '', pax: '', type: 'meja', event_choice: 'paket' });
-
   const [showPrintEventModal, setShowPrintEventModal] = useState(false); const [eventTotalAmount, setEventTotalAmount] = useState('');
-
+  const [showOrderPreviewModal, setShowOrderPreviewModal] = useState(false); const [previewOrder, setPreviewOrder] = useState(null);
+  const [showEventPreviewModal, setShowEventPreviewModal] = useState(false);
   const [invHistory, setInvHistory] = useState([]); const [showInvHistory, setShowInvHistory] = useState(false);
   const [showStockModal, setShowStockModal] = useState(false); const [selectedMaterial, setSelectedMaterial] = useState(null); const [newStockVal, setNewStockVal] = useState(''); const [stockReason, setStockReason] = useState('');
-
   const [showPromoModal, setShowPromoModal] = useState(false); const [promoForm, setPromoForm] = useState({ menu_item_id: '', name: '', type: 'percent', value: '', end_date: '' });
   const [showUserModal, setShowUserModal] = useState(false); const [userForm, setUserForm] = useState({ username: '', password: '', role: 'kasir' });
-
   const prevOrderCount = useRef(0);
   const prevResvCount = useRef(0);
-
   const handleLogin = (e) => {
     e.preventDefault();
     axios.post(`${API_URL}/api/login`, { username, password })
@@ -117,9 +99,7 @@ function AdminDashboard() {
       })
       .catch(err => alert(err.response?.data?.error || "Gagal Login"));
   }
-
   const handleLogout = () => { setIsAuthenticated(false); setUsername(''); setPassword(''); setUserRole(''); localStorage.clear(); }
-
   const fetchData = () => {
     if (!isAuthenticated) return;
     axios.get(`${API_URL}/api/admin/orders`).then(res => {
@@ -128,18 +108,15 @@ function AdminDashboard() {
       prevOrderCount.current = newActiveOrders.length;
       setOrders(res.data);
     }).catch(err => console.log(err));
-
     axios.get(`${API_URL}/api/admin/reservations`).then(res => {
       const newResv = res.data.filter(r => r.status === 'pending_wa');
       if (newResv.length > prevResvCount.current && prevResvCount.current !== 0) { playNotificationSound(); }
       prevResvCount.current = newResv.length;
       setReservations(res.data);
     }).catch(err => console.log(err));
-
     axios.get(`${API_URL}/api/menu`).then(res => setMenus(res.data)).catch(err => console.log(err));
     axios.get(`${API_URL}/api/packages`).then(res => setPackages(res.data)).catch(err => console.log(err));
     axios.get(`${API_URL}/api/tables`).then(res => setTables(res.data)).catch(err => console.log(err));
-
     if (activeTab === 'inventory') {
       axios.get(`${API_URL}/api/admin/inventory`).then(res => setInventory(res.data)).catch(err => console.log(err));
       if (showInvHistory) axios.get(`${API_URL}/api/admin/inventory-history`).then(res => setInvHistory(res.data)).catch(err => console.log(err));
@@ -149,35 +126,33 @@ function AdminDashboard() {
     if (activeTab === 'users') axios.get(`${API_URL}/api/admin/users`).then(res => setUsersList(res.data)).catch(err => console.log(err));
     if (activeTab === 'reports') axios.get(`${API_URL}/api/admin/reports?date=${reportDate}`).then(res => setReportData(res.data)).catch(err => console.log(err));
   };
-
   useEffect(() => { fetchData(); const interval = setInterval(fetchData, 5000); return () => clearInterval(interval); }, [isAuthenticated, activeTab, showInvHistory, reportDate]);
-
   const updateOrderStatus = (id, newStatus) => { axios.patch(`${API_URL}/api/admin/orders/${id}/status`, { status: newStatus }).then(() => fetchData()); };
-  const triggerLegacyPrint = (id) => { axios.post(`${API_URL}/api/admin/orders/${id}/print`).then(res => { alert(res.data.message); fetchData(); }).catch(err => alert("Gagal cetak")); };
-
+  const triggerLegacyPrint = (order) => { setPreviewOrder(order); setShowOrderPreviewModal(true); };
+  const confirmOrderPrint = () => {
+    axios.post(`${API_URL}/api/admin/orders/${previewOrder.id}/print`, { kasir_name: username })
+      .then(res => { alert(res.data.message); setShowOrderPreviewModal(false); setPreviewOrder(null); fetchData(); })
+      .catch(err => alert('Gagal cetak: ' + (err.response?.data?.error || err.message)));
+  };
   const submitEventConfirmation = () => {
     if (!selectedTableId) return alert("Pilih meja!");
     if (eventMode === 'paket' && !selectedPackageId) return alert("Pilih paket event dari daftar!");
     if (eventMode === 'pilih' && eventCart.length === 0) return alert("Pilih minimal satu menu untuk dimasukkan ke keranjang event!");
-
     const payload = {
       table_id: selectedTableId,
       package_id: eventMode === 'paket' ? selectedPackageId : null,
       menu_items: eventMode === 'pilih' ? eventCart : null
     };
-
     axios.post(`${API_URL}/api/admin/reservations/${selectedResv.id}/confirm-event`, payload)
       .then(res => {
         alert(res.data.message); setShowResvModal(false); setSelectedPackageId(''); setEventCart([]); setSelectedTableId(''); fetchData();
       })
       .catch(err => alert(err.response?.data?.error || "Terjadi kesalahan!"));
   };
-
   const confirmMejaBiasa = () => {
     if (!selectedTableId) return alert("Pilih meja!");
     axios.post(`${API_URL}/api/admin/reservations/${selectedResv.id}/confirm-meja`, { table_id: selectedTableId }).then(res => { alert(res.data.message); setShowResvModal(false); setSelectedTableId(''); fetchData(); }).catch(err => alert(err.response?.data?.error));
   }
-
   // 🔥 FUNGSI BARU: MENYELESAIKAN MEJA BIASA SECARA MANUAL 🔥
   const completeMejaBiasa = (id) => {
     if (window.confirm("Tamu sudah datang? Reservasi Meja ini akan ditandai selesai dan disembunyikan.")) {
@@ -186,8 +161,10 @@ function AdminDashboard() {
         .catch(err => alert("Gagal menyelesaikan reservasi."));
     }
   };
-
   const submitManualResv = () => {
+    if (!manualResvForm.name || !manualResvForm.phone || !manualResvForm.date || !manualResvForm.pax) {
+      return alert("Harap isi semua bidang (Nama, No HP, Tanggal, dan Pax)!");
+    }
     if (manualResvForm.type === 'event') {
       const resDate = new Date(manualResvForm.date);
       const minDate = new Date();
@@ -196,11 +173,9 @@ function AdminDashboard() {
     }
     axios.post(`${API_URL}/api/admin/reservations/manual`, manualResvForm).then(res => { alert("Sukses!"); setShowManualResv(false); fetchData(); }).catch(err => alert(err.response?.data?.error || "Gagal menyimpan reservasi manual"));
   }
-
   const handleOpenPrintModal = (resv) => {
     setSelectedResv(resv);
     let autoTotal = 0;
-
     if (resv.event_choice?.startsWith('paket_')) {
       const pId = parseInt(resv.event_choice.split('_')[1]);
       const pkg = packages.find(p => p.id === pId);
@@ -219,37 +194,50 @@ function AdminDashboard() {
         });
       }
     }
-
     setEventTotalAmount(autoTotal);
     setShowPrintEventModal(true);
   };
-
   const submitEventPrint = () => {
     if (!eventTotalAmount) return alert("Masukkan total harga event!");
-    axios.post(`${API_URL}/api/admin/reservations/${selectedResv.id}/print`, { total_amount: eventTotalAmount }).then(res => { alert(res.data.message); setShowPrintEventModal(false); setEventTotalAmount(''); fetchData(); }).catch(err => alert(err.response?.data?.error || "Gagal mengirim ke printer!"));
+    setShowPrintEventModal(false);
+    setShowEventPreviewModal(true);
   };
-
+  const confirmEventPrint = () => {
+    // Hitung deskripsi event untuk dikirim ke legacy DB
+    let eventDesc = '';
+    if (selectedResv?.event_choice?.startsWith('paket_')) {
+      const pId = parseInt(selectedResv.event_choice.split('_')[1]);
+      const pkg = packages.find(p => p.id === pId);
+      if (pkg) eventDesc = `${pkg.name}: ${pkg.description || ''}`;
+    } else if (selectedResv?.event_choice?.startsWith('pilih_')) {
+      const itemsStr = selectedResv.event_choice.replace('pilih_', '');
+      const items = itemsStr.split(',').map(pair => { const [mId, mQty] = pair.split(':'); const menu = menus.find(m => m.id === parseInt(mId)); return menu ? `${mQty}x ${menu.name}` : null; }).filter(Boolean);
+      eventDesc = items.join(', ');
+    }
+    axios.post(`${API_URL}/api/admin/reservations/${selectedResv.id}/print`, {
+      total_amount: eventTotalAmount,
+      kasir_name: username,
+      event_description: eventDesc
+    }).then(res => { alert(res.data.message); setShowEventPreviewModal(false); setEventTotalAmount(''); fetchData(); })
+      .catch(err => alert(err.response?.data?.error || 'Gagal mengirim ke printer!'));
+  };
   const submitStockUpdate = () => {
     if (!stockReason) return alert("Wajib diisi!");
     axios.patch(`${API_URL}/api/admin/inventory/${selectedMaterial.id}`, { stock: newStockVal, reason: stockReason, updated_by: username }).then(() => { alert('Update sukses!'); setShowStockModal(false); fetchData(); }).catch(() => alert('Gagal!'));
   };
-
   const submitPromo = () => {
     if (!promoForm.menu_item_id || !promoForm.value || !promoForm.end_date) return alert("Isi semua!");
     axios.post(`${API_URL}/api/admin/promotions`, promoForm).then(() => { alert('Sukses!'); setShowPromoModal(false); fetchData(); });
   };
   const deletePromo = (id) => { if (window.confirm("Hapus diskon?")) axios.delete(`${API_URL}/api/admin/promotions/${id}`).then(() => fetchData()); };
-
   const submitUser = () => {
     if (!userForm.username || !userForm.password) return alert("Username & Password wajib diisi!");
     axios.post(`${API_URL}/api/admin/users`, userForm).then(res => { alert(res.data.message); setShowUserModal(false); setUserForm({ username: '', password: '', role: 'kasir' }); fetchData(); }).catch(err => alert(err.response?.data?.error || "Gagal membuat akun"));
   };
-
   // --- POS KASIR MANUAL ---
   const [posCart, setPosCart] = useState([]);
   const [posTable, setPosTable] = useState('');
   const [posSearch, setPosSearch] = useState('');
-
   const addPosItem = (menu) => {
     const exist = posCart.find(i => i.id === menu.id);
     if (exist) {
@@ -265,18 +253,15 @@ function AdminDashboard() {
       else { setPosCart(posCart.map(i => i.id === menu.id ? { ...i, qty: i.qty - 1 } : i)); }
     }
   }
-
   const posTotal = posCart.reduce((sum, item) => sum + (item.price * item.qty), 0);
   const submitPosOrder = () => {
     if (!posTable || posCart.length === 0) return alert("Pilih meja dan menu!");
     axios.post(`${API_URL}/api/checkout`, { table_id: posTable, items: posCart.map(i => ({ menu_item_id: i.id, quantity: i.qty })) }).then(() => { alert("Pesanan Kasir masuk!"); setPosCart([]); setPosTable(''); fetchData(); setActiveTab('orders'); });
   }
-
   if (!isAuthenticated) return (<div className="login-container"><div className="login-box"><h2>🔒 Secure Login</h2><p>Masukkan Kredensial Pegawai</p><form onSubmit={handleLogin}><input type="text" placeholder="Username (contoh: admin)" value={username} onChange={e => setUsername(e.target.value)} required /><input type="password" placeholder="Password (contoh: admin123)" value={password} onChange={e => setPassword(e.target.value)} required /><button type="submit" className="login-btn">Masuk Dashboard</button></form></div></div>);
-
+  if (!isAuthenticated) return (<div className="login-container"><div className="login-box"><h2>🔒 Secure Login</h2><p>Masukkan Kredensial Pegawai</p><form onSubmit={handleLogin}><input type="text" placeholder="Username (contoh: admin)" value={username} onChange={e => setUsername(e.target.value)} required /><input type="password" placeholder="Password (contoh: admin123)" value={password} onChange={e => setPassword(e.target.value)} required /><button type="submit" className="login-btn">Masuk Dashboard</button></form></div></div>);
   return (
     <div className="admin-container">
-
       {/* MODAL KONFIRMASI RESERVASI (KERANJANG EVENT MULTIPLE MENU) */}
       {showResvModal && (
         <div className="modal-overlay">
@@ -289,7 +274,6 @@ function AdminDashboard() {
                 <option value="">-- Pilih Meja --</option>
                 {[...Array(50)].map((_, i) => <option key={i + 1} value={i + 1}>Meja {i + 1}</option>)}
               </select>
-
               {selectedResv.reservation_type === 'event' && (
                 <>
                   <label>Jenis Hidangan Event:</label>
@@ -301,16 +285,6 @@ function AdminDashboard() {
                     <option value="paket">🍱 Menggunakan Paket</option>
                     <option value="pilih">🍲 Memilih Beberapa Menu</option>
                   </select>
-
-                  {eventMode === 'paket' && (
-                    <>
-                      <select value={selectedPackageId} onChange={(e) => setSelectedPackageId(e.target.value)}>
-                        <option value="">-- Pilih Paket Wedding/Spesial --</option>
-                        {packages.map(p => <option key={p.id} value={p.id}>{p.name} - Rp {Number(p.price).toLocaleString()}</option>)}
-                      </select>
-                    </>
-                  )}
-
                   {/* MINI KERANJANG UNTUK EVENT */}
                   {eventMode === 'pilih' && (
                     <div style={{ background: '#f8f9fa', padding: '15px', borderRadius: '8px', border: '1px solid #ddd' }}>
@@ -329,7 +303,6 @@ function AdminDashboard() {
                           setEventMenuDropdown('');
                         }}>Tambah</button>
                       </div>
-
                       {eventCart.length > 0 && (
                         <ul style={{ listStyle: 'none', background: 'white', padding: '10px', borderRadius: '5px', border: '1px solid #eee' }}>
                           {eventCart.map(c => (
@@ -344,36 +317,179 @@ function AdminDashboard() {
                       )}
                     </div>
                   )}
+                  {eventMode === 'paket' && (
+                    <select value={selectedPackageId} onChange={(e) => setSelectedPackageId(e.target.value)}>
+                      <option value="">-- Pilih Paket Event --</option>
+                      {packages.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                  )}
                 </>
               )}
-
               <div className="modal-actions">
-                <button className="btn-secondary" onClick={() => { setShowResvModal(false); setEventCart([]); }}>Batal</button>
-                <button className="btn-ready" onClick={selectedResv.reservation_type === 'event' ? submitEventConfirmation : confirmMejaBiasa}>Setujui & Kunci</button>
+                <button className="btn-secondary" onClick={() => setShowResvModal(false)}>Batal</button>
+                <button className="btn-ready" onClick={selectedResv.reservation_type === 'event' ? submitEventConfirmation : confirmMejaBiasa}>Konfirmasi &amp; Simpan</button>
               </div>
             </div>
           </div>
         </div>
       )}
-
-      {/* MODAL CETAK TAGIHAN EVENT */}
+      {/* MODAL PRINT EVENT */}
       {showPrintEventModal && (
         <div className="modal-overlay">
           <div className="modal-content">
-            <h3>Cetak Tagihan Event: {selectedResv?.customer_name}</h3>
-            <p>Sistem telah menghitung total secara otomatis (<strong>{selectedResv?.pax_count} Pax</strong>). Anda tetap bisa mengubah angkanya jika ingin memberikan diskon.</p>
+            <h3>🧾 Atur Total Tagihan Event</h3>
+            <p style={{ color: '#666', marginBottom: '5px' }}>Untuk: <strong>{selectedResv?.customer_name}</strong> &nbsp;|&nbsp; <strong>{selectedResv?.pax_count} Pax</strong></p>
+            <p style={{ color: '#888', fontSize: '0.85rem', marginBottom: '15px' }}>Sistem telah menghitung otomatis. Ubah jika ada diskon khusus.</p>
             <div className="modal-form">
               <label>Total Harga Final (Rp):</label>
               <input type="number" style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--coffee-main)' }} value={eventTotalAmount} onChange={(e) => setEventTotalAmount(e.target.value)} />
               <div className="modal-actions">
                 <button className="btn-secondary" onClick={() => setShowPrintEventModal(false)}>Batal</button>
-                <button className="btn-ready" onClick={submitEventPrint}>Kirim ke Printer Legacy</button>
+                <button className="btn-ready" onClick={submitEventPrint}>Preview Nota &rarr;</button>
               </div>
             </div>
           </div>
         </div>
       )}
-
+      {/* MODAL PREVIEW NOTA ORDER BIASA */}
+      {showOrderPreviewModal && previewOrder && (
+        <div className="modal-overlay" style={{ zIndex: 2000 }}>
+          <div className="modal-content" style={{ maxWidth: '420px', padding: 0, borderRadius: '16px', overflow: 'hidden' }}>
+            <div style={{ background: 'linear-gradient(135deg, #6f4e37, #a0522d)', padding: '18px 24px', textAlign: 'center', color: 'white' }}>
+              <img src={rcmLogo} alt="logo" style={{ height: '44px', width: '44px', borderRadius: '50%', objectFit: 'contain', border: '2px solid rgba(255,255,255,0.5)', marginBottom: '8px' }} />
+              <h3 style={{ margin: 0, fontSize: '1.1rem', letterSpacing: '1px' }}>RAYA CAFE MADIUN</h3>
+              <p style={{ margin: '2px 0 0', fontSize: '0.75rem', opacity: 0.85 }}>Preview Nota — Belum Tercetak</p>
+            </div>
+            <div style={{ background: '#fffdf9', padding: '20px 24px', fontFamily: 'monospace' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#888', marginBottom: '4px' }}>
+                <span>Meja: <strong style={{ color: '#333' }}>{previewOrder.tables?.table_number || previewOrder.table_id}</strong></span>
+                <span>{new Date().toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+              </div>
+              <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '12px' }}>
+                Kasir: <strong style={{ color: '#6f4e37' }}>{username.toUpperCase()}</strong>
+              </div>
+              <div style={{ borderTop: '2px dashed #d4a96a', borderBottom: '2px dashed #d4a96a', padding: '12px 0', margin: '12px 0' }}>
+                {previewOrder.order_items.map(item => (
+                  <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.88rem' }}>
+                    <span style={{ flex: 1 }}>{item.quantity}x {item.menu_items?.name}</span>
+                    <span style={{ fontWeight: 'bold' }}>Rp {(Number(item.menu_items?.price || 0) * item.quantity).toLocaleString('id-ID')}</span>
+                  </div>
+                ))}
+              </div>
+              {Number(previewOrder.discount_amount) > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: '#888', marginBottom: '4px' }}>
+                  <span>Subtotal</span><span>Rp {Number(previewOrder.subtotal).toLocaleString('id-ID')}</span>
+                </div>
+              )}
+              {Number(previewOrder.discount_amount) > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: '#27ae60', marginBottom: '4px' }}>
+                  <span>Diskon Promo</span><span>- Rp {Number(previewOrder.discount_amount).toLocaleString('id-ID')}</span>
+                </div>
+              )}
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '1.05rem', color: '#6f4e37', borderTop: '1px solid #eee', paddingTop: '10px', marginTop: '6px' }}>
+                <span>TOTAL</span><span>Rp {Number(previewOrder.final_total).toLocaleString('id-ID')}</span>
+              </div>
+              <p style={{ textAlign: 'center', color: '#b8860b', fontSize: '0.75rem', marginTop: '14px', letterSpacing: '0.5px' }}>✨ Terima Kasih atas Kunjungan Anda ✨</p>
+            </div>
+            <div style={{ display: 'flex', gap: '10px', padding: '14px 24px', background: '#f5f0eb', borderTop: '1px solid #e8ddd0' }}>
+              <button className="btn-secondary" style={{ flex: 1 }} onClick={() => { setShowOrderPreviewModal(false); setPreviewOrder(null); }}>❌ Batal</button>
+              <button className="btn-ready" style={{ flex: 2, background: 'linear-gradient(135deg, #e67e22, #d35400)' }} onClick={confirmOrderPrint}>✅ Konfirmasi &amp; Cetak</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* MODAL PREVIEW NOTA EVENT */}
+      {showEventPreviewModal && selectedResv && (
+        <div className="modal-overlay" style={{ zIndex: 2000 }}>
+          <div className="modal-content" style={{ maxWidth: '440px', padding: 0, borderRadius: '16px', overflow: 'hidden' }}>
+            <div style={{ background: 'linear-gradient(135deg, #6f4e37, #a0522d)', padding: '18px 24px', textAlign: 'center', color: 'white' }}>
+              <img src={rcmLogo} alt="logo" style={{ height: '44px', width: '44px', borderRadius: '50%', objectFit: 'contain', border: '2px solid rgba(255,255,255,0.5)', marginBottom: '8px' }} />
+              <h3 style={{ margin: 0, fontSize: '1.1rem', letterSpacing: '1px' }}>RAYA CAFE MADIUN</h3>
+              <p style={{ margin: '2px 0 0', fontSize: '0.75rem', opacity: 0.85 }}>Preview Nota Event — Belum Tercetak</p>
+            </div>
+            <div style={{ background: '#fffdf9', padding: '20px 24px', fontFamily: 'monospace', maxHeight: '65vh', overflowY: 'auto' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#888', marginBottom: '2px' }}>
+                <span>Meja: <strong style={{ color: '#333' }}>{selectedResv.table_id || '-'}</strong></span>
+                <span>{new Date().toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+              </div>
+              <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '12px' }}>
+                Kasir: <strong style={{ color: '#6f4e37' }}>{username.toUpperCase()}</strong>
+              </div>
+              <div style={{ borderTop: '2px dashed #d4a96a', borderBottom: '2px dashed #d4a96a', padding: '12px 0', margin: '12px 0' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.88rem' }}>
+                  <span style={{ flex: 1 }}>Nama Pemesan</span>
+                  <span style={{ fontWeight: 'bold' }}>{selectedResv.customer_name}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.88rem' }}>
+                  <span style={{ flex: 1 }}>Tipe</span>
+                  <span style={{ fontWeight: 'bold' }}>🎟️ Reservasi Event</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.88rem' }}>
+                  <span style={{ flex: 1 }}>Jumlah Pax</span>
+                  <span style={{ fontWeight: 'bold' }}>{selectedResv.pax_count} Orang</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.88rem' }}>
+                  <span style={{ flex: 1 }}>Tanggal Event</span>
+                  <span style={{ fontWeight: 'bold' }}>{new Date(selectedResv.reservation_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}</span>
+                </div>
+                {/* PAKET: tampilkan nama + deskripsi isi */}
+                {(() => {
+                  if (selectedResv.event_choice?.startsWith('paket_')) {
+                    const pId = parseInt(selectedResv.event_choice.split('_')[1]);
+                    const pkg = packages.find(p => p.id === pId);
+                    if (!pkg) return null;
+                    return (
+                      <div style={{ background: '#fdf2e9', borderRadius: '8px', padding: '10px', border: '1px solid #e8c99a' }}>
+                        <div style={{ fontWeight: 'bold', fontSize: '0.9rem', color: '#6f4e37', marginBottom: '6px' }}>🍱 {pkg.name}</div>
+                        <div style={{ fontSize: '0.82rem', color: '#555', lineHeight: '1.6' }}>
+                          {pkg.description ? pkg.description.split(',').map((item, i) => (
+                            <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '4px', marginBottom: '2px' }}>
+                              <span style={{ color: '#a0522d', flexShrink: 0 }}>•</span>
+                              <span>{item.trim()}</span>
+                            </div>
+                          )) : <span style={{ color: '#999' }}>-</span>}
+                        </div>
+                        <div style={{ fontSize: '0.78rem', color: '#888', marginTop: '6px', borderTop: '1px dashed #e8c99a', paddingTop: '6px' }}>
+                          Rp {Number(pkg.price).toLocaleString('id-ID')} /pax × {selectedResv.pax_count} pax
+                        </div>
+                      </div>
+                    );
+                  } else if (selectedResv.event_choice?.startsWith('pilih_')) {
+                    const itemsStr = selectedResv.event_choice.replace('pilih_', '');
+                    const items = itemsStr.split(',').map(pair => { const [mId, mQty] = pair.split(':'); const menu = menus.find(m => m.id === parseInt(mId)); return menu ? { name: menu.name, qty: parseInt(mQty) } : null; }).filter(Boolean);
+                    return (
+                      <div style={{ background: '#f0f8ff', borderRadius: '8px', padding: '10px', border: '1px solid #b8d4ec' }}>
+                        <div style={{ fontWeight: 'bold', fontSize: '0.9rem', color: '#2c6e9e', marginBottom: '6px' }}>🍲 Menu Pilihan (per pax)</div>
+                        {items.map((it, i) => (
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '3px', fontSize: '0.85rem' }}>
+                            <span style={{ color: '#2c6e9e' }}>•</span>
+                            <span>{it.qty}x {it.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '1.05rem', color: '#6f4e37', borderTop: '1px solid #eee', paddingTop: '10px', marginTop: '6px' }}>
+                <span>TOTAL</span><span>Rp {Number(eventTotalAmount).toLocaleString('id-ID')}</span>
+              </div>
+              <p style={{ textAlign: 'center', color: '#b8860b', fontSize: '0.75rem', marginTop: '14px', letterSpacing: '0.5px' }}>✨ Terima Kasih atas Kunjungan Anda ✨</p>
+              {/* PERINGATAN STOK MANUAL untuk paket */}
+              {selectedResv.event_choice?.startsWith('paket_') && (
+                <div style={{ background: '#fff3cd', border: '1px solid #ffc107', borderRadius: '8px', padding: '10px 12px', marginTop: '12px', fontSize: '0.78rem', color: '#856404' }}>
+                  ⚠️ <strong>Pengingat Stok:</strong> Kurangi stok bahan baku secara manual di tab <strong>📦 Stok</strong> sesuai jumlah pax event ini.
+                </div>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: '10px', padding: '14px 24px', background: '#f5f0eb', borderTop: '1px solid #e8ddd0' }}>
+              <button className="btn-secondary" style={{ flex: 1 }} onClick={() => { setShowEventPreviewModal(false); setShowPrintEventModal(true); }}>← Edit Total</button>
+              <button className="btn-ready" style={{ flex: 2, background: 'linear-gradient(135deg, #8e44ad, #6c3483)' }} onClick={confirmEventPrint}>✅ Konfirmasi &amp; Cetak</button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* MODAL RESERVASI MANUAL */}
       {showManualResv && (
         <div className="modal-overlay">
@@ -384,19 +500,16 @@ function AdminDashboard() {
               <input type="text" placeholder="No HP" onChange={e => setManualResvForm({ ...manualResvForm, phone: e.target.value })} />
               <input type="datetime-local" onChange={e => setManualResvForm({ ...manualResvForm, date: e.target.value })} />
               <input type="number" placeholder="Jumlah Orang (Pax)" onChange={e => setManualResvForm({ ...manualResvForm, pax: e.target.value })} />
-
               <select onChange={e => setManualResvForm({ ...manualResvForm, type: e.target.value, event_choice: e.target.value === 'event' ? 'paket' : null })}>
                 <option value="meja">Meja Biasa</option>
                 <option value="event">Event Khusus (Min H-3)</option>
               </select>
-
               {manualResvForm.type === 'event' && (
                 <select onChange={e => setManualResvForm({ ...manualResvForm, event_choice: e.target.value })}>
                   <option value="paket">Ambil Paket Spesial</option>
                   <option value="pilih">Pesan Menu Reguler / Biasa</option>
                 </select>
               )}
-
               <div className="modal-actions">
                 <button className="btn-secondary" onClick={() => setShowManualResv(false)}>Batal</button>
                 <button className="btn-process" onClick={submitManualResv}>Simpan</button>
@@ -405,25 +518,19 @@ function AdminDashboard() {
           </div>
         </div>
       )}
-
       {/* MODAL STOK OPNAME */}
       {showStockModal && (<div className="modal-overlay"><div className="modal-content"><h3>Update Stok: {selectedMaterial?.name}</h3><div className="modal-form"><input type="number" value={newStockVal} onChange={(e) => setNewStockVal(e.target.value)} /><input type="text" placeholder="Alasan (Contoh: Tumpah, Basi)..." value={stockReason} onChange={(e) => setStockReason(e.target.value)} required /><div className="modal-actions"><button className="btn-secondary" onClick={() => setShowStockModal(false)}>Batal</button><button className="btn-process" onClick={submitStockUpdate}>Simpan</button></div></div></div></div>)}
-
       {/* MODAL PROMO */}
       {showPromoModal && (<div className="modal-overlay"><div className="modal-content"><h3>Tambah Diskon</h3><div className="modal-form"><select value={promoForm.menu_item_id} onChange={(e) => setPromoForm({ ...promoForm, menu_item_id: e.target.value })}><option value="">-- Menu --</option>{menus.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select><input type="text" placeholder="Nama Diskon" value={promoForm.name} onChange={(e) => setPromoForm({ ...promoForm, name: e.target.value })} /><select value={promoForm.type} onChange={(e) => setPromoForm({ ...promoForm, type: e.target.value })}><option value="percent">Persen (%)</option><option value="nominal">Rupiah (Rp)</option></select><input type="number" placeholder="Nilai" value={promoForm.value} onChange={(e) => setPromoForm({ ...promoForm, value: e.target.value })} /><input type="datetime-local" value={promoForm.end_date} onChange={(e) => setPromoForm({ ...promoForm, end_date: e.target.value })} /><div className="modal-actions"><button className="btn-secondary" onClick={() => setShowPromoModal(false)}>Batal</button><button className="btn-ready" onClick={submitPromo}>Simpan</button></div></div></div></div>)}
-
       {/* MODAL USERS */}
       {showUserModal && (<div className="modal-overlay"><div className="modal-content"><h3>Tambah Pegawai</h3><div className="modal-form"><input type="text" placeholder="Username" value={userForm.username} onChange={(e) => setUserForm({ ...userForm, username: e.target.value })} /><input type="password" placeholder="Password" value={userForm.password} onChange={(e) => setUserForm({ ...userForm, password: e.target.value })} /><select value={userForm.role} onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}><option value="kasir">Kasir</option><option value="admin">Admin / Manajer</option></select><div className="modal-actions"><button className="btn-secondary" onClick={() => setShowUserModal(false)}>Batal</button><button className="btn-ready" onClick={submitUser}>Simpan Akun</button></div></div></div></div>)}
-
-
       <header className="admin-header">
-        <div><h1>Pusat Kendali Raya Cafe</h1><span style={{ background: '#34495e', padding: '5px 10px', borderRadius: '5px', fontSize: '0.8rem', display: 'inline-block', marginTop: '5px' }}>👤 Login: <strong>{username.toUpperCase()} ({userRole.toUpperCase()})</strong></span></div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}><img src={rcmLogo} alt="Raya Cafe Logo" style={{ height: '52px', width: '52px', objectFit: 'contain', borderRadius: '50%', boxShadow: '0 2px 10px rgba(0,0,0,0.25)', border: '2px solid rgba(255,255,255,0.3)' }} /><div><h1>Pusat Kendali Raya Cafe</h1><span style={{ background: '#34495e', color: 'white', padding: '5px 10px', borderRadius: '5px', fontSize: '0.8rem', display: 'inline-block', marginTop: '5px' }}>👤 Login: <strong>{username.toUpperCase()} ({userRole.toUpperCase()})</strong></span></div></div>
         <div className="header-actions">
           <Link to="/" className="link-btn" target="_blank">Lihat PWA</Link>
           <button className="logout-btn" onClick={handleLogout}>Logout</button>
         </div>
       </header>
-
       <div className="admin-tabs">
         <button className={activeTab === 'orders' ? 'adm-tab active' : 'adm-tab'} onClick={() => setActiveTab('orders')}>🛎️ Live Orders</button>
         <button className={activeTab === 'pos' ? 'adm-tab active' : 'adm-tab'} onClick={() => setActiveTab('pos')}>🛒 POS Kasir</button>
@@ -438,7 +545,6 @@ function AdminDashboard() {
           </>
         )}
       </div>
-
       <div className="admin-content">
         {/* TAB: PWA ORDERS */}
         {activeTab === 'orders' && (
@@ -454,13 +560,12 @@ function AdminDashboard() {
                   {order.status === 'pending' && <button className="btn-process" onClick={() => updateOrderStatus(order.id, 'preparing')}>Proses</button>}
                   {order.status === 'preparing' && <button className="btn-ready" onClick={() => updateOrderStatus(order.id, 'ready')}>Siap</button>}
                   {order.status === 'ready' && <button className="btn-done" onClick={() => updateOrderStatus(order.id, 'served')}>Selesai</button>}
-                  {order.status === 'served' && <button className="btn-done" style={{ backgroundColor: '#e67e22' }} onClick={() => triggerLegacyPrint(order.id)}>Cetak Tagihan</button>}
+                  {order.status === 'served' && <button className="btn-done" style={{ backgroundColor: '#e67e22' }} onClick={() => triggerLegacyPrint(order)}>Cetak Tagihan</button>}
                 </div>
               </div>
             ))}
           </div>
         )}
-
         {/* TAB: POS KASIR MANUAL */}
         {activeTab === 'pos' && (
           <div style={{ display: 'flex', gap: '20px' }}>
@@ -475,7 +580,6 @@ function AdminDashboard() {
                   style={{ padding: '8px 15px', border: '1px solid #ccc', borderRadius: '20px', width: '200px' }}
                 />
               </div>
-
               <div className="menu-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
                 {menus.filter(m => m.name.toLowerCase().includes(posSearch.toLowerCase())).map(m => (
                   <div key={m.id} className="menu-card" style={{ padding: '10px', cursor: 'pointer', border: '1px solid #ddd' }} onClick={() => addPosItem(m)}>
@@ -485,14 +589,12 @@ function AdminDashboard() {
                 ))}
               </div>
             </div>
-
             <div style={{ flex: 1, background: '#f8f9fa', padding: '20px', borderRadius: '10px', height: 'fit-content' }}>
               <h3>Keranjang Kasir</h3>
               <select style={{ width: '100%', padding: '10px', margin: '15px 0', borderRadius: '5px', border: '1px solid #ccc' }} value={posTable} onChange={e => setPosTable(e.target.value)}>
                 <option value="">-- Pilih Meja Pelanggan --</option>
                 {[...Array(50)].map((_, i) => <option key={i + 1} value={i + 1}>Meja {i + 1}</option>)}
               </select>
-
               <ul className="order-item-list" style={{ background: 'white', padding: '10px', borderRadius: '5px', border: '1px solid #eee', maxHeight: '300px', overflowY: 'auto' }}>
                 {posCart.length === 0 && <li style={{ textAlign: 'center', color: '#999', padding: '10px 0' }}>Keranjang kosong</li>}
                 {posCart.map(c => (
@@ -509,14 +611,12 @@ function AdminDashboard() {
                   </li>
                 ))}
               </ul>
-
               <h3 style={{ marginTop: '20px' }}>Total: Rp {posTotal.toLocaleString()}</h3>
               <button className="submit-order-btn" style={{ marginTop: '15px' }} onClick={submitPosOrder}>Kirim Pesanan</button>
             </div>
           </div>
         )}
-
-        {/* TAB: RESERVATIONS (DENGAN FILTER UNTUK MENYEMBUNYIKAN COMPLETED) */}
+        {/* TAB: RESERVATIONS */}
         {activeTab === 'reservations' && (
           <div className="inventory-section">
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}><h2>Daftar Reservasi</h2><button className="btn-ready" onClick={() => setShowManualResv(true)}>+ Tambah Manual</button></div>
@@ -543,14 +643,16 @@ function AdminDashboard() {
                           else { setSelectedPackageId(''); }
                         }
                         setShowResvModal(true);
-                      }}>✅ Konfirmasi & Plot Meja</button>
+                      }}>✅ Konfirmasi &amp; Plot Meja</button>
                     )}
-
                     {/* TOMBOL SELESAI AKTIF UNTUK EVENT DAN MEJA BIASA */}
                     {resv.status === 'confirmed' && (resv.reservation_type === 'event' ? (
                       <button className="btn-process" style={{ backgroundColor: '#e67e22' }} onClick={() => handleOpenPrintModal(resv)}>🖨️ Event Selesai</button>
                     ) : (
-                      <button className="btn-done" style={{ backgroundColor: '#3498db' }} onClick={() => completeMejaBiasa(resv.id)}>🚶‍♂️ Tamu Datang</button>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: '100%' }}>
+                        <button className="btn-done" style={{ backgroundColor: '#3498db' }} onClick={() => completeMejaBiasa(resv.id)}>🚶‍♂️ Tamu Datang &amp; Selesai</button>
+                        <p style={{ margin: 0, fontSize: '0.72rem', color: '#888', textAlign: 'center', lineHeight: '1.4' }}>Tagihan makan diproses via<br/><strong>Live Orders</strong> atau <strong>POS Kasir</strong></p>
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -558,26 +660,154 @@ function AdminDashboard() {
             </div>
           </div>
         )}
-
         {/* TAB: LAPORAN HARIAN (REPORTS) */}
-        {activeTab === 'reports' && userRole === 'admin' && reportData && (
-          <div className="inventory-section">
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px', alignItems: 'center' }}>
-              <h2>Laporan Penjualan</h2>
-              <input type="date" value={reportDate} onChange={e => setReportDate(e.target.value)} style={{ padding: '10px', borderRadius: '5px', border: '1px solid #ccc', fontSize: '1rem' }} />
+        {activeTab === 'reports' && userRole === 'admin' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            {/* ── HEADER LAPORAN ── */}
+            <div style={{ background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)', borderRadius: '20px', padding: '32px 36px', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 20px 60px rgba(15,52,96,0.3)' }}>
+              <div>
+                <p style={{ fontSize: '0.85rem', color: 'white', opacity: 0.65, letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '6px' }}>Dashboard Analitik</p>
+                <h2 style={{ fontSize: '1.9rem', color: 'white', fontWeight: '800', margin: 0, letterSpacing: '-0.5px'}}>📊 Laporan Penjualan</h2>
+                <p style={{ color: 'white', opacity: 0.7, marginTop: '6px', fontSize: '0.9rem' }}>
+                  {new Date(reportDate).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                </p>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <label style={{ display: 'block', fontSize: '0.75rem', opacity: 0.6, marginBottom: '8px', letterSpacing: '1px', textTransform: 'uppercase' }}>Pilih Tanggal</label>
+                <input
+                  type="date"
+                  value={reportDate}
+                  onChange={e => setReportDate(e.target.value)}
+                  style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '10px', color: 'white', padding: '10px 16px', fontSize: '0.95rem', cursor: 'pointer', backdropFilter: 'blur(10px)' }}
+                />
+              </div>
             </div>
-            <div style={{ display: 'flex', gap: '20px', marginBottom: '30px' }}>
-              <div style={{ flex: 1, background: '#2ecc71', color: 'white', padding: '20px', borderRadius: '10px' }}><h3>Total Pendapatan</h3><h2 style={{ fontSize: '2rem' }}>Rp {reportData.total_revenue.toLocaleString('id-ID')}</h2></div>
-              <div style={{ flex: 1, background: '#3498db', color: 'white', padding: '20px', borderRadius: '10px' }}><h3>Total Transaksi</h3><h2 style={{ fontSize: '2rem' }}>{reportData.total_orders} Pesanan</h2></div>
-              <div style={{ flex: 1, background: '#e67e22', color: 'white', padding: '20px', borderRadius: '10px' }}><h3>Diskon Terpakai</h3><h2 style={{ fontSize: '2rem' }}>Rp {reportData.total_discount_given.toLocaleString('id-ID')}</h2></div>
-            </div>
-            <h3>Menu Paling Laris Hari Ini:</h3>
-            <ul style={{ background: '#f9f9f9', padding: '20px', borderRadius: '10px', listStyle: 'none' }}>
-              {reportData.top_items.length === 0 ? <li>Belum ada penjualan.</li> : reportData.top_items.map((item, idx) => (<li key={idx} style={{ fontSize: '1.2rem', marginBottom: '10px' }}>🏅 {item.name} - <strong>{item.qty} Porsi</strong></li>))}
-            </ul>
+            {!reportData ? (
+              <div style={{ textAlign: 'center', padding: '60px', background: 'white', borderRadius: '16px', color: '#999', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+                <div style={{ fontSize: '3rem', marginBottom: '12px', animation: 'spin 2s linear infinite', display: 'inline-block' }}>⏳</div>
+                <p style={{ fontSize: '1.1rem' }}>Memuat data laporan...</p>
+              </div>
+            ) : (
+              <>
+                {/* ── METRIC CARDS ── */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
+                  {/* Card Pendapatan */}
+                  <div style={{ background: 'white', borderRadius: '16px', padding: '24px 28px', boxShadow: '0 4px 20px rgba(0,0,0,0.06)', borderLeft: '5px solid #27ae60', position: 'relative', overflow: 'hidden' }}>
+                    <div style={{ position: 'absolute', top: '-10px', right: '-10px', width: '80px', height: '80px', background: 'rgba(39,174,96,0.08)', borderRadius: '50%' }} />
+                    <div style={{ fontSize: '2rem', marginBottom: '8px' }}>💰</div>
+                    <p style={{ color: '#888', fontSize: '0.82rem', fontWeight: '600', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '6px' }}>Total Pendapatan</p>
+                    <h2 style={{ fontSize: '1.8rem', fontWeight: '800', color: '#1a1a2e', lineHeight: 1.1 }}>Rp {reportData.total_revenue.toLocaleString('id-ID')}</h2>
+                    <p style={{ color: '#27ae60', fontSize: '0.82rem', marginTop: '8px', fontWeight: '600' }}>✓ Sudah termasuk semua pembayaran</p>
+                  </div>
+                  {/* Card Transaksi */}
+                  <div style={{ background: 'white', borderRadius: '16px', padding: '24px 28px', boxShadow: '0 4px 20px rgba(0,0,0,0.06)', borderLeft: '5px solid #2980b9', position: 'relative', overflow: 'hidden' }}>
+                    <div style={{ position: 'absolute', top: '-10px', right: '-10px', width: '80px', height: '80px', background: 'rgba(41,128,185,0.08)', borderRadius: '50%' }} />
+                    <div style={{ fontSize: '2rem', marginBottom: '8px' }}>🧾</div>
+                    <p style={{ color: '#888', fontSize: '0.82rem', fontWeight: '600', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '6px' }}>Total Transaksi</p>
+                    <h2 style={{ fontSize: '1.8rem', fontWeight: '800', color: '#1a1a2e', lineHeight: 1.1 }}>{reportData.total_orders} <span style={{ fontSize: '1rem', fontWeight: '500', color: '#888' }}>pesanan</span></h2>
+                    {reportData.total_orders > 0 && (
+                      <p style={{ color: '#2980b9', fontSize: '0.82rem', marginTop: '8px', fontWeight: '600' }}>
+                        ⌀ Rp {Math.round(reportData.total_revenue / reportData.total_orders).toLocaleString('id-ID')} / transaksi
+                      </p>
+                    )}
+                  </div>
+                  {/* Card Diskon */}
+                  <div style={{ background: 'white', borderRadius: '16px', padding: '24px 28px', boxShadow: '0 4px 20px rgba(0,0,0,0.06)', borderLeft: '5px solid #e67e22', position: 'relative', overflow: 'hidden' }}>
+                    <div style={{ position: 'absolute', top: '-10px', right: '-10px', width: '80px', height: '80px', background: 'rgba(230,126,34,0.08)', borderRadius: '50%' }} />
+                    <div style={{ fontSize: '2rem', marginBottom: '8px' }}>🎁</div>
+                    <p style={{ color: '#888', fontSize: '0.82rem', fontWeight: '600', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '6px' }}>Diskon Diberikan</p>
+                    <h2 style={{ fontSize: '1.8rem', fontWeight: '800', color: '#1a1a2e', lineHeight: 1.1 }}>Rp {reportData.total_discount_given.toLocaleString('id-ID')}</h2>
+                    {reportData.total_revenue > 0 && (
+                      <p style={{ color: '#e67e22', fontSize: '0.82rem', marginTop: '8px', fontWeight: '600' }}>
+                        {((reportData.total_discount_given / (reportData.total_revenue + reportData.total_discount_given)) * 100).toFixed(1)}% dari omzet kotor
+                      </p>
+                    )}
+                  </div>
+                </div>
+                {/* ── BOTTOM ROW: Chart + Tabel ── */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.6fr', gap: '20px' }}>
+                  {/* Bar Chart – Top Menu */}
+                  <div style={{ background: 'white', borderRadius: '16px', padding: '28px', boxShadow: '0 4px 20px rgba(0,0,0,0.06)' }}>
+                    <h3 style={{ fontWeight: '700', fontSize: '1.05rem', color: '#1a1a2e', marginBottom: '6px' }}>🏆 Menu Terlaris</h3>
+                    <p style={{ color: '#aaa', fontSize: '0.8rem', marginBottom: '24px' }}>Berdasarkan jumlah porsi terjual hari ini</p>
+                    {reportData.top_items.length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: '40px 0', color: '#ccc' }}>
+                        <div style={{ fontSize: '3rem', marginBottom: '12px' }}>📭</div>
+                        <p>Belum ada penjualan hari ini</p>
+                      </div>
+                    ) : (() => {
+                      const maxQty = Math.max(...reportData.top_items.map(i => i.qty));
+                      const colors = ['#6f4e37', '#a0522d', '#c0874f', '#d4a96a', '#e8c99a'];
+                      const ranks = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
+                      return reportData.top_items.map((item, idx) => (
+                        <div key={idx} style={{ marginBottom: '16px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                            <span style={{ fontSize: '0.88rem', fontWeight: '600', color: '#333', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span>{ranks[idx]}</span>
+                              <span style={{ maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
+                            </span>
+                            <span style={{ fontWeight: '700', fontSize: '0.9rem', color: colors[0], background: '#fdf2e9', padding: '2px 10px', borderRadius: '20px' }}>{item.qty} porsi</span>
+                          </div>
+                          <div style={{ background: '#f0ebe5', borderRadius: '20px', height: '10px', overflow: 'hidden' }}>
+                            <div style={{ height: '100%', width: `${(item.qty / maxQty) * 100}%`, background: `linear-gradient(90deg, ${colors[idx] || '#d4a96a'}, ${colors[idx] || '#d4a96a'}cc)`, borderRadius: '20px', transition: 'width 0.8s ease' }} />
+                          </div>
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                  {/* Detail Transaksi */}
+                  <div style={{ background: 'white', borderRadius: '16px', padding: '28px', boxShadow: '0 4px 20px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                      <div>
+                        <h3 style={{ fontWeight: '700', fontSize: '1.05rem', color: '#1a1a2e', marginBottom: '4px' }}>📋 Detail Transaksi</h3>
+                        <p style={{ color: '#aaa', fontSize: '0.8rem' }}>{reportData.orders_detail?.length || 0} transaksi tercatat</p>
+                      </div>
+                    </div>
+                    <div style={{ overflowY: 'auto', maxHeight: '320px' }}>
+                      {!reportData.orders_detail || reportData.orders_detail.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '40px 0', color: '#ccc' }}>
+                          <div style={{ fontSize: '3rem', marginBottom: '12px' }}>📭</div>
+                          <p>Tidak ada transaksi</p>
+                        </div>
+                      ) : (
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                          <thead>
+                            <tr style={{ background: '#f8f6f3' }}>
+                              <th style={{ padding: '10px 14px', textAlign: 'left', fontSize: '0.78rem', color: '#888', fontWeight: '700', letterSpacing: '0.5px', textTransform: 'uppercase', borderRadius: '8px 0 0 8px' }}>Order</th>
+                              <th style={{ padding: '10px 14px', textAlign: 'left', fontSize: '0.78rem', color: '#888', fontWeight: '700', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Meja</th>
+                              <th style={{ padding: '10px 14px', textAlign: 'left', fontSize: '0.78rem', color: '#888', fontWeight: '700', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Item</th>
+                              <th style={{ padding: '10px 14px', textAlign: 'right', fontSize: '0.78rem', color: '#888', fontWeight: '700', letterSpacing: '0.5px', textTransform: 'uppercase', borderRadius: '0 8px 8px 0' }}>Total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {reportData.orders_detail.map((ord, idx) => (
+                              <tr key={ord.id} style={{ borderBottom: '1px solid #f0ebe5' }}>
+                                <td style={{ padding: '12px 14px', fontSize: '0.82rem', color: '#555' }}>
+                                  <span style={{ background: '#1a1a2e', color: 'white', fontSize: '0.7rem', padding: '3px 8px', borderRadius: '6px', fontWeight: '700' }}>#{ord.id}</span>
+                                </td>
+                                <td style={{ padding: '12px 14px', fontSize: '0.85rem', fontWeight: '600', color: '#333' }}>
+                                  Meja {ord.tables?.table_number || ord.table_id}
+                                </td>
+                                <td style={{ padding: '12px 14px', fontSize: '0.82rem', color: '#666', maxWidth: '160px' }}>
+                                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
+                                    {ord.order_items?.map(i => `${i.quantity}x ${i.menu_items?.name}`).join(', ') || '-'}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '12px 14px', textAlign: 'right', fontWeight: '700', fontSize: '0.9rem', color: '#27ae60' }}>
+                                  Rp {Number(ord.final_total).toLocaleString('id-ID')}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
-
         {/* TAB: INVENTORY */}
         {activeTab === 'inventory' && userRole === 'admin' && (
           <div className="inventory-section">
@@ -587,7 +817,6 @@ function AdminDashboard() {
                 {showInvHistory ? 'Kembali ke Daftar Stok' : '📄 Lihat Riwayat (Audit)'}
               </button>
             </div>
-
             {!showInvHistory ? (
               <table className="inventory-table">
                 <thead><tr><th>Nama Bahan</th><th>Stok Saat Ini</th><th>Batas Min</th><th>Aksi Opname</th></tr></thead>
@@ -625,7 +854,6 @@ function AdminDashboard() {
             )}
           </div>
         )}
-
         {/* TAB: PROMOTIONS */}
         {activeTab === 'promotions' && userRole === 'admin' && (
           <div className="inventory-section">
@@ -649,7 +877,6 @@ function AdminDashboard() {
             </table>
           </div>
         )}
-
         {/* TAB: FEEDBACK */}
         {activeTab === 'feedback' && userRole === 'admin' && (
           <div className="inventory-section">
@@ -672,7 +899,6 @@ function AdminDashboard() {
             </table>
           </div>
         )}
-
         {/* TAB: USERS */}
         {activeTab === 'users' && userRole === 'admin' && (
           <div className="inventory-section">
@@ -697,11 +923,9 @@ function AdminDashboard() {
             </table>
           </div>
         )}
-
       </div>
     </div>
   );
 }
-
 function App() { return <Router><Routes><Route path="/" element={<CustomerApp />} /><Route path="/admin" element={<AdminDashboard />} /></Routes></Router> }
 export default App

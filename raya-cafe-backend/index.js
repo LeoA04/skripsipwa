@@ -258,6 +258,18 @@ app.post('/api/checkout', async (req, res) => {
   try {
     const result = await prisma.$transaction(async (tx) => {
       let subtotal_bayar = 0; let total_potongan = 0; let total_asli = 0;
+
+      // Resolve table_id: cari ID yang benar berdasarkan nomor meja
+      let validTableId = parseInt(table_id);
+      const tableRecord = await tx.tables.findFirst({ where: { table_number: parseInt(table_id) } });
+      if (tableRecord) {
+        validTableId = tableRecord.id;
+      } else {
+        // Jika nomor meja belum ada di tabel tables, gunakan tabel pertama sebagai fallback
+        const firstTable = await tx.tables.findFirst({ orderBy: { id: 'asc' } });
+        if (firstTable) validTableId = firstTable.id;
+      }
+
       for (const item of items) {
         const menu = await tx.menu_items.findUnique({ where: { id: item.menu_item_id }, include: { recipe_bom: { include: { raw_materials: true } } } });
         const promo = await tx.promotions.findFirst({ where: { menu_item_id: menu.id, is_active: true, end_date: { gt: new Date() } } });
@@ -276,7 +288,7 @@ app.post('/api/checkout', async (req, res) => {
           await tx.raw_materials.update({ where: { id: resep.raw_material_id }, data: { current_stock: { decrement: kebutuhan } } });
         }
       }
-      return await tx.orders.create({ data: { table_id: parseInt(table_id), subtotal: total_asli, discount_amount: total_potongan, final_total: subtotal_bayar, status: 'pending', order_items: { create: items.map(i => ({ menu_item_id: i.menu_item_id, quantity: i.quantity, notes: i.notes || '' })) } } });
+      return await tx.orders.create({ data: { table_id: validTableId, subtotal: total_asli, discount_amount: total_potongan, final_total: subtotal_bayar, status: 'pending', order_items: { create: items.map(i => ({ menu_item_id: i.menu_item_id, quantity: i.quantity, notes: i.notes || '' })) } } });
     });
     res.json({ message: "Berhasil checkout!", data: result });
   } catch (error) { res.status(400).json({ error: error.message }); }
@@ -288,6 +300,7 @@ app.patch('/api/admin/orders/:id/status', async (req, res) => { try { res.json(a
 // JEMBATAN KE DATABASE LEGACY (KASIR LAMA)
 app.post('/api/admin/orders/:id/print', async (req, res) => {
   const orderId = parseInt(req.params.id);
+  const { kasir_name } = req.body;
   try {
     const result = await prisma.$transaction(async (tx) => {
       // 1. Ambil data order PWA
@@ -296,9 +309,10 @@ app.post('/api/admin/orders/:id/print', async (req, res) => {
       
       // 2. KIRIM KE DATABASE LEGACY KASIR (tbl_pos_penjualan)
       const noNota = `PWA-${Date.now()}`;
+      const kasirInput = kasir_name ? `PWA_${kasir_name.toUpperCase()}` : 'Sistem_PWA';
       await legacyDb.query(
           `INSERT INTO tbl_pos_penjualan (no_nota, tgl_transaksi, no_meja, total_bayar, kasir_input, sumber_order) VALUES (?, NOW(), ?, ?, ?, ?)`,
-          [noNota, tableNum, order.final_total, 'Sistem_PWA', 'APLIKASI_QR']
+          [noNota, tableNum, order.final_total, kasirInput, 'APLIKASI_QR']
       );
 
       // 3. Masukkan item-item ke (tbl_pos_detail)
@@ -328,6 +342,10 @@ app.post('/api/admin/reservations/manual', async (req, res) => {
   try {
     const { name, phone, date, pax, type, event_choice } = req.body;
     
+    if (!name || !phone || !date || !pax) {
+        return res.status(400).json({ error: "Nama, No HP, Tanggal, dan Pax wajib diisi!" });
+    }
+
     // Validasi backend untuk H-3 Manual Input
     if (type === 'event') {
         const today = new Date(); today.setHours(0,0,0,0);
@@ -404,15 +422,29 @@ app.post('/api/admin/reservations/:id/confirm-meja', async (req, res) => {
 // CETAK EVENT JUGA MENEMBAK KE DATABASE LEGACY LAMA
 app.post('/api/admin/reservations/:id/print', async (req, res) => {
   try {
-    const { total_amount } = req.body;
+    const { total_amount, kasir_name, event_description } = req.body;
     
     await prisma.$transaction(async (tx) => {
       const resv = await tx.reservations.findUnique({ where: { id: parseInt(req.params.id) } });
 
-      // 1. Buat pesanan (orders) di PWA DB agar masuk laporan harian
+      // 1. Cari table yang valid berdasarkan table_number untuk menghindari FK constraint error
+      let validTableId = 1; // fallback default
+      if (resv.table_id) {
+        // resv.table_id menyimpan nomor meja (bukan ID tabel), cari ID yang benar
+        const tableRecord = await tx.tables.findFirst({ where: { table_number: resv.table_id } });
+        if (tableRecord) {
+          validTableId = tableRecord.id;
+        } else {
+          // Jika meja belum ada di tabel tables, ambil ID tabel pertama yang ada
+          const firstTable = await tx.tables.findFirst({ orderBy: { id: 'asc' } });
+          if (firstTable) validTableId = firstTable.id;
+        }
+      }
+
+      // 2. Buat pesanan (orders) di PWA DB agar masuk laporan harian
       const newOrder = await tx.orders.create({
           data: {
-            table_id: resv.table_id || 1, 
+            table_id: validTableId,
             subtotal: parseFloat(total_amount),
             discount_amount: 0,
             final_total: parseFloat(total_amount),
@@ -420,20 +452,24 @@ app.post('/api/admin/reservations/:id/print', async (req, res) => {
           }
       });
 
-      // 2. KIRIM KE DATABASE LEGACY
+      // 3. KIRIM KE DATABASE LEGACY
       const noNota = `EVT-${Date.now()}`;
+      const kasirInput = kasir_name ? `EVT_${kasir_name.toUpperCase()}` : 'Sistem_PWA';
       await legacyDb.query(
           `INSERT INTO tbl_pos_penjualan (no_nota, tgl_transaksi, no_meja, total_bayar, kasir_input, sumber_order) VALUES (?, NOW(), ?, ?, ?, ?)`,
-          [noNota, resv.table_id || 1, total_amount, 'Sistem_PWA', 'RESERVASI_WA']
+          [noNota, resv.table_id || 1, total_amount, kasirInput, 'RESERVASI_WA']
       );
 
-      // 3. Masukkan item "Paket Event" ke legacy detail
+      // 4. Masukkan item ke legacy detail (nama paket + isi deskripsi)
+      const namaItem = event_description 
+        ? `Event: ${resv.pax_count} Pax | ${event_description}`
+        : `Paket Event (${resv.pax_count} Pax)`;
       await legacyDb.query(
           `INSERT INTO tbl_pos_detail (no_nota, nama_item, qty, harga_satuan, subtotal) VALUES (?, ?, ?, ?, ?)`,
-          [noNota, `Paket Event (${resv.pax_count} Pax)`, 1, total_amount, total_amount]
+          [noNota, namaItem.substring(0, 255), 1, total_amount, total_amount]
       );
 
-      // 4. Tandai Selesai
+      // 5. Tandai Selesai
       await tx.reservations.update({ where: { id: resv.id }, data: { status: 'completed' } });
     });
 
@@ -443,9 +479,11 @@ app.post('/api/admin/reservations/:id/print', async (req, res) => {
 
 // --- API LAPORAN (REPORTS) ---
 app.get('/api/admin/reports', async (req, res) => {
-  const dateQuery = req.query.date || new Date().toISOString().split('T')[0]; 
+  const dateQuery = req.query.date || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' }); 
   try {
-    const startDate = new Date(`${dateQuery}T00:00:00.000Z`); const endDate = new Date(`${dateQuery}T23:59:59.999Z`);
+    // Gunakan timezone WIB (UTC+7) agar laporan sesuai hari di Indonesia
+    const startDate = new Date(`${dateQuery}T00:00:00+07:00`);
+    const endDate = new Date(`${dateQuery}T23:59:59+07:00`);
     const orders = await prisma.orders.findMany({ where: { created_at: { gte: startDate, lte: endDate }, status: { in: ['paid', 'served'] } }, include: { order_items: { include: { menu_items: true } } } });
     let totalRevenue = 0; let totalDiscount = 0; let itemCounts = {};
     orders.forEach(o => { 
