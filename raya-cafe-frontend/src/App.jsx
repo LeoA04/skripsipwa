@@ -258,8 +258,23 @@ function AdminDashboard() {
     if (!posTable || posCart.length === 0) return alert("Pilih meja dan menu!");
     axios.post(`${API_URL}/api/checkout`, { table_id: posTable, items: posCart.map(i => ({ menu_item_id: i.id, quantity: i.qty })) }).then(() => { alert("Pesanan Kasir masuk!"); setPosCart([]); setPosTable(''); fetchData(); setActiveTab('orders'); });
   }
-  if (!isAuthenticated) return (<div className="login-container"><div className="login-box"><h2>🔒 Secure Login</h2><p>Masukkan Kredensial Pegawai</p><form onSubmit={handleLogin}><input type="text" placeholder="Username (contoh: admin)" value={username} onChange={e => setUsername(e.target.value)} required /><input type="password" placeholder="Password (contoh: admin123)" value={password} onChange={e => setPassword(e.target.value)} required /><button type="submit" className="login-btn">Masuk Dashboard</button></form></div></div>);
-  if (!isAuthenticated) return (<div className="login-container"><div className="login-box"><h2>🔒 Secure Login</h2><p>Masukkan Kredensial Pegawai</p><form onSubmit={handleLogin}><input type="text" placeholder="Username (contoh: admin)" value={username} onChange={e => setUsername(e.target.value)} required /><input type="password" placeholder="Password (contoh: admin123)" value={password} onChange={e => setPassword(e.target.value)} required /><button type="submit" className="login-btn">Masuk Dashboard</button></form></div></div>);
+  if (!isAuthenticated) return (
+    <div className="login-container">
+      <div className="login-box">
+        <div style={{ marginBottom: '20px' }}>
+          <img src={rcmLogo} alt="Raya Cafe" style={{ height: '72px', width: '72px', objectFit: 'contain', borderRadius: '50%', boxShadow: '0 8px 24px rgba(0,0,0,0.3)', border: '2px solid rgba(255,255,255,0.15)', marginBottom: '16px' }} />
+          <h2>Raya Cafe</h2>
+          <p>Dashboard Manajemen — Masukkan kredensial Anda</p>
+        </div>
+        <form onSubmit={handleLogin}>
+          <input type="text" placeholder="Username" value={username} onChange={e => setUsername(e.target.value)} required />
+          <input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} required />
+          <button type="submit" className="login-btn">Masuk Dashboard →</button>
+        </form>
+        <p style={{ marginTop: '20px', fontSize: '0.78rem', color: 'rgba(200,170,145,0.45)' }}>© 2026 Raya Cafe Madiun</p>
+      </div>
+    </div>
+  );
   return (
     <div className="admin-container">
       {/* MODAL KONFIRMASI RESERVASI (KERANJANG EVENT MULTIPLE MENU) */}
@@ -525,7 +540,13 @@ function AdminDashboard() {
       {/* MODAL USERS */}
       {showUserModal && (<div className="modal-overlay"><div className="modal-content"><h3>Tambah Pegawai</h3><div className="modal-form"><input type="text" placeholder="Username" value={userForm.username} onChange={(e) => setUserForm({ ...userForm, username: e.target.value })} /><input type="password" placeholder="Password" value={userForm.password} onChange={(e) => setUserForm({ ...userForm, password: e.target.value })} /><select value={userForm.role} onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}><option value="kasir">Kasir</option><option value="admin">Admin / Manajer</option></select><div className="modal-actions"><button className="btn-secondary" onClick={() => setShowUserModal(false)}>Batal</button><button className="btn-ready" onClick={submitUser}>Simpan Akun</button></div></div></div></div>)}
       <header className="admin-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}><img src={rcmLogo} alt="Raya Cafe Logo" style={{ height: '52px', width: '52px', objectFit: 'contain', borderRadius: '50%', boxShadow: '0 2px 10px rgba(0,0,0,0.25)', border: '2px solid rgba(255,255,255,0.3)' }} /><div><h1>Pusat Kendali Raya Cafe</h1><span style={{ background: '#34495e', color: 'white', padding: '5px 10px', borderRadius: '5px', fontSize: '0.8rem', display: 'inline-block', marginTop: '5px' }}>👤 Login: <strong>{username.toUpperCase()} ({userRole.toUpperCase()})</strong></span></div></div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <img src={rcmLogo} alt="Raya Cafe Logo" style={{ height: '48px', width: '48px', objectFit: 'contain', borderRadius: '50%', boxShadow: '0 4px 14px rgba(0,0,0,0.35)', border: '2px solid rgba(255,255,255,0.15)' }} />
+          <div>
+            <h1>Pusat Kendali Raya Cafe</h1>
+            <span style={{ background: 'rgba(201,149,106,0.18)', color: '#e8c49a', padding: '4px 12px', borderRadius: '999px', fontSize: '0.78rem', display: 'inline-block', marginTop: '4px', border: '1px solid rgba(201,149,106,0.25)', fontWeight: '600', letterSpacing: '0.3px' }}>👤 {username.toUpperCase()} &nbsp;·&nbsp; {userRole.toUpperCase()}</span>
+          </div>
+        </div>
         <div className="header-actions">
           <Link to="/" className="link-btn" target="_blank">Lihat PWA</Link>
           <button className="logout-btn" onClick={handleLogout}>Logout</button>
@@ -557,62 +578,76 @@ function AdminDashboard() {
                   <h4 className="order-total">Total: Rp {Number(order.final_total).toLocaleString('id-ID')}</h4>
                 </div>
                 <div className="order-card-actions">
-                  {order.status === 'pending' && <button className="btn-process" onClick={() => updateOrderStatus(order.id, 'preparing')}>Proses</button>}
-                  {order.status === 'preparing' && <button className="btn-ready" onClick={() => updateOrderStatus(order.id, 'ready')}>Siap</button>}
-                  {order.status === 'ready' && <button className="btn-done" onClick={() => updateOrderStatus(order.id, 'served')}>Selesai</button>}
-                  {order.status === 'served' && <button className="btn-done" style={{ backgroundColor: '#e67e22' }} onClick={() => triggerLegacyPrint(order)}>Cetak Tagihan</button>}
+                  {order.status === 'pending' && <button className="btn-process" onClick={() => updateOrderStatus(order.id, 'preparing')}>🔥 Proses</button>}
+                  {order.status === 'preparing' && <button className="btn-ready" onClick={() => updateOrderStatus(order.id, 'ready')}>✅ Siap Saji</button>}
+                  {order.status === 'ready' && <button className="btn-done" onClick={() => updateOrderStatus(order.id, 'served')}>🛎️ Antar ke Meja</button>}
+                  {order.status === 'served' && <button className="btn-done" style={{ background: 'linear-gradient(135deg,var(--coffee-latte),var(--coffee-caramel))', color: 'var(--coffee-espresso)' }} onClick={() => triggerLegacyPrint(order)}>🖨️ Cetak Tagihan</button>}
                 </div>
               </div>
             ))}
+            {orders.length === 0 && (
+              <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '80px 40px', background: 'var(--bg-surface)', borderRadius: 'var(--radius-lg)', border: '1.5px dashed rgba(92,61,46,0.12)' }}>
+                <div style={{ fontSize: '4rem', marginBottom: '16px' }}>☕</div>
+                <h3 style={{ color: 'var(--coffee-dark)', marginBottom: '8px', fontWeight: '800' }}>Semua Pesanan Selesai</h3>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>Tidak ada pesanan aktif saat ini. Halaman akan memperbarui secara otomatis.</p>
+              </div>
+            )}
           </div>
         )}
         {/* TAB: POS KASIR MANUAL */}
         {activeTab === 'pos' && (
-          <div style={{ display: 'flex', gap: '20px' }}>
-            <div style={{ flex: 2, background: 'white', padding: '20px', borderRadius: '10px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                <h3 style={{ margin: 0 }}>Pilih Menu (Walk-in)</h3>
+          <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start' }}>
+            {/* Menu Grid */}
+            <div style={{ flex: 2, background: 'var(--bg-surface)', padding: '28px', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)', border: '1.5px solid rgba(92,61,46,0.06)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                <h3 style={{ fontSize: '1.3rem', fontWeight: '800', color: 'var(--coffee-dark)' }}>🛒 Pilih Menu (Walk-in)</h3>
                 <input
                   type="text"
                   placeholder="🔍 Cari Menu..."
                   value={posSearch}
                   onChange={e => setPosSearch(e.target.value)}
-                  style={{ padding: '8px 15px', border: '1px solid #ccc', borderRadius: '20px', width: '200px' }}
+                  style={{ padding: '10px 18px', border: '1.5px solid rgba(92,61,46,0.14)', borderRadius: '999px', width: '220px', fontFamily: 'var(--font-main)', fontSize: '0.9rem', background: 'var(--bg-main)', color: 'var(--text-main)' }}
                 />
               </div>
-              <div className="menu-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
+              <div className="menu-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '12px', padding: 0 }}>
                 {menus.filter(m => m.name.toLowerCase().includes(posSearch.toLowerCase())).map(m => (
-                  <div key={m.id} className="menu-card" style={{ padding: '10px', cursor: 'pointer', border: '1px solid #ddd' }} onClick={() => addPosItem(m)}>
-                    <h4 style={{ fontSize: '1rem', marginBottom: '5px' }}>{m.name}</h4>
-                    <p style={{ color: 'var(--coffee-main)', fontWeight: 'bold' }}>Rp {m.price.toLocaleString()}</p>
+                  <div key={m.id} className="menu-card" style={{ padding: '14px', cursor: 'pointer' }} onClick={() => addPosItem(m)}>
+                    <h4 style={{ fontSize: '0.97rem', marginBottom: '6px', color: 'var(--text-main)', fontWeight: '700' }}>{m.name}</h4>
+                    <p style={{ color: 'var(--coffee-main)', fontWeight: '800', fontSize: '1rem' }}>Rp {Number(m.price).toLocaleString('id-ID')}</p>
                   </div>
                 ))}
               </div>
             </div>
-            <div style={{ flex: 1, background: '#f8f9fa', padding: '20px', borderRadius: '10px', height: 'fit-content' }}>
-              <h3>Keranjang Kasir</h3>
-              <select style={{ width: '100%', padding: '10px', margin: '15px 0', borderRadius: '5px', border: '1px solid #ccc' }} value={posTable} onChange={e => setPosTable(e.target.value)}>
+            {/* Keranjang */}
+            <div style={{ flex: 1, background: 'linear-gradient(135deg, var(--bg-admin), #2d1a0a)', padding: '24px', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-md)', position: 'sticky', top: '20px' }}>
+              <h3 style={{ color: 'var(--coffee-cream)', fontWeight: '800', fontSize: '1.15rem', marginBottom: '16px' }}>🧾 Keranjang Kasir</h3>
+              <select style={{ width: '100%', padding: '11px 14px', margin: '0 0 16px', borderRadius: 'var(--radius-sm)', border: '1.5px solid rgba(201,149,106,0.25)', background: 'rgba(255,255,255,0.06)', color: 'var(--coffee-cream)', fontFamily: 'var(--font-main)', fontSize: '0.92rem' }} value={posTable} onChange={e => setPosTable(e.target.value)}>
                 <option value="">-- Pilih Meja Pelanggan --</option>
-                {[...Array(50)].map((_, i) => <option key={i + 1} value={i + 1}>Meja {i + 1}</option>)}
+                {[...Array(50)].map((_, i) => <option key={i+1} value={i+1}>Meja {i+1}</option>)}
               </select>
-              <ul className="order-item-list" style={{ background: 'white', padding: '10px', borderRadius: '5px', border: '1px solid #eee', maxHeight: '300px', overflowY: 'auto' }}>
-                {posCart.length === 0 && <li style={{ textAlign: 'center', color: '#999', padding: '10px 0' }}>Keranjang kosong</li>}
+              <ul style={{ listStyle: 'none', background: 'rgba(255,255,255,0.05)', padding: '12px', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(255,255,255,0.06)', maxHeight: '320px', overflowY: 'auto' }}>
+                {posCart.length === 0 && <li style={{ textAlign: 'center', color: 'rgba(200,170,145,0.4)', padding: '20px 0', fontSize: '0.88rem' }}>Keranjang kosong</li>}
                 {posCart.map(c => (
-                  <li key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px dashed #eee', padding: '8px 0' }}>
+                  <li key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px dashed rgba(255,255,255,0.06)', padding: '10px 0' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', background: '#fdf2e9', borderRadius: '15px', padding: '2px', border: '1px solid var(--coffee-main)' }}>
-                        <button onClick={() => reducePosItem(c)} style={{ background: 'var(--coffee-main)', color: 'white', border: 'none', borderRadius: '50%', width: '22px', height: '22px', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>-</button>
-                        <span style={{ fontSize: '0.85rem', width: '20px', textAlign: 'center', fontWeight: 'bold', color: 'var(--coffee-main)' }}>{c.qty}</span>
-                        <button onClick={() => addPosItem(c)} style={{ background: 'var(--coffee-main)', color: 'white', border: 'none', borderRadius: '50%', width: '22px', height: '22px', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>+</button>
+                      <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(201,149,106,0.15)', borderRadius: '999px', padding: '2px 4px', gap: '4px', border: '1px solid rgba(201,149,106,0.25)' }}>
+                        <button onClick={() => reducePosItem(c)} style={{ background: 'var(--coffee-latte)', color: 'var(--coffee-espresso)', border: 'none', borderRadius: '50%', width: '22px', height: '22px', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', fontWeight: '700', fontSize: '1rem' }}>-</button>
+                        <span style={{ fontSize: '0.88rem', width: '22px', textAlign: 'center', fontWeight: '800', color: 'var(--coffee-cream)' }}>{c.qty}</span>
+                        <button onClick={() => addPosItem(c)} style={{ background: 'var(--coffee-latte)', color: 'var(--coffee-espresso)', border: 'none', borderRadius: '50%', width: '22px', height: '22px', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', fontWeight: '700', fontSize: '1rem' }}>+</button>
                       </div>
-                      <span style={{ fontSize: '0.9rem' }}>{c.name}</span>
+                      <span style={{ fontSize: '0.88rem', color: 'var(--coffee-cream)' }}>{c.name}</span>
                     </div>
-                    <strong style={{ fontSize: '0.9rem' }}>Rp {(c.price * c.qty).toLocaleString()}</strong>
+                    <strong style={{ fontSize: '0.88rem', color: 'var(--coffee-caramel)' }}>Rp {(c.price * c.qty).toLocaleString('id-ID')}</strong>
                   </li>
                 ))}
               </ul>
-              <h3 style={{ marginTop: '20px' }}>Total: Rp {posTotal.toLocaleString()}</h3>
-              <button className="submit-order-btn" style={{ marginTop: '15px' }} onClick={submitPosOrder}>Kirim Pesanan</button>
+              <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid rgba(201,149,106,0.2)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <span style={{ color: 'var(--text-on-dark-muted)', fontSize: '0.9rem' }}>Total</span>
+                  <strong style={{ color: 'var(--coffee-caramel)', fontSize: '1.3rem', fontWeight: '800', letterSpacing: '-0.4px' }}>Rp {posTotal.toLocaleString('id-ID')}</strong>
+                </div>
+                <button className="submit-order-btn" onClick={submitPosOrder} style={{ background: 'linear-gradient(135deg, var(--coffee-latte), var(--coffee-caramel))', color: 'var(--coffee-espresso)', boxShadow: '0 4px 16px rgba(201,149,106,0.35)' }}>✅ Kirim Pesanan</button>
+              </div>
             </div>
           </div>
         )}
@@ -622,11 +657,13 @@ function AdminDashboard() {
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}><h2>Daftar Reservasi</h2><button className="btn-ready" onClick={() => setShowManualResv(true)}>+ Tambah Manual</button></div>
             <div className="order-grid">
               {reservations.filter(resv => resv.status !== 'completed').map(resv => (
-                <div key={resv.id} className="order-card-admin" style={{ borderTop: resv.reservation_type === 'event' ? '4px solid #9b59b6' : '4px solid #3498db' }}>
+                <div key={resv.id} className="order-card-admin" style={{ borderTop: resv.reservation_type === 'event' ? '4px solid #8e44ad' : '4px solid var(--accent-info)' }}>
                   <div className="order-card-header"><h3>{resv.customer_name}</h3><span className={`status-badge badge-${resv.status === 'pending_wa' ? 'warning' : 'success'}`}>{resv.status.replace('_', ' ').toUpperCase()}</span></div>
                   <div className="order-card-body">
-                    <div style={{ marginBottom: '10px' }}>
-                      {resv.reservation_type === 'event' ? <span style={{ background: '#9b59b6', color: 'white', padding: '4px 8px', borderRadius: '5px', fontSize: '0.8rem' }}>🎟️ EVENT ({resv.event_choice?.startsWith('paket') ? 'PAKET' : (resv.event_choice?.startsWith('pilih') ? 'PILIHAN MENU' : 'BELUM PILIH')})</span> : <span style={{ background: '#3498db', color: 'white', padding: '4px 8px', borderRadius: '5px', fontSize: '0.8rem' }}>🪑 MEJA</span>}
+                    <div style={{ marginBottom: '12px' }}>
+                      {resv.reservation_type === 'event'
+                        ? <span style={{ background: 'linear-gradient(135deg,#8e44ad,#6c3483)', color: 'white', padding: '4px 12px', borderRadius: '999px', fontSize: '0.75rem', fontWeight: '700', letterSpacing: '0.3px' }}>🎟️ EVENT · {resv.event_choice?.startsWith('paket') ? 'PAKET' : (resv.event_choice?.startsWith('pilih') ? 'PILIHAN MENU' : 'BELUM PILIH')}</span>
+                        : <span style={{ background: 'linear-gradient(135deg, var(--accent-info), #1560a0)', color: 'white', padding: '4px 12px', borderRadius: '999px', fontSize: '0.75rem', fontWeight: '700', letterSpacing: '0.3px' }}>🪑 MEJA BIASA</span>}
                     </div>
                     <p>Kontak: {resv.customer_phone}</p><p>Jumlah: <strong>{resv.pax_count} Orang</strong></p><p>Plot: <strong>{resv.table_id ? `Meja ${resv.table_id}` : 'Belum'}</strong></p><h4 className="order-total">{new Date(resv.reservation_date).toLocaleString('id-ID')}</h4>
                   </div>
@@ -647,11 +684,11 @@ function AdminDashboard() {
                     )}
                     {/* TOMBOL SELESAI AKTIF UNTUK EVENT DAN MEJA BIASA */}
                     {resv.status === 'confirmed' && (resv.reservation_type === 'event' ? (
-                      <button className="btn-process" style={{ backgroundColor: '#e67e22' }} onClick={() => handleOpenPrintModal(resv)}>🖨️ Event Selesai</button>
+                      <button className="btn-process" style={{ background: 'linear-gradient(135deg, var(--coffee-latte), var(--coffee-caramel))', color: 'var(--coffee-espresso)' }} onClick={() => handleOpenPrintModal(resv)}>🖨️ Event Selesai &amp; Cetak</button>
                     ) : (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: '100%' }}>
-                        <button className="btn-done" style={{ backgroundColor: '#3498db' }} onClick={() => completeMejaBiasa(resv.id)}>🚶‍♂️ Tamu Datang &amp; Selesai</button>
-                        <p style={{ margin: 0, fontSize: '0.72rem', color: '#888', textAlign: 'center', lineHeight: '1.4' }}>Tagihan makan diproses via<br/><strong>Live Orders</strong> atau <strong>POS Kasir</strong></p>
+                        <button className="btn-process" onClick={() => completeMejaBiasa(resv.id)}>🚶‍♂️ Tamu Datang &amp; Selesai</button>
+                        <p style={{ margin: 0, fontSize: '0.72rem', color: 'var(--text-faint)', textAlign: 'center', lineHeight: '1.4' }}>Tagihan makan diproses via<br/><strong>Live Orders</strong> atau <strong>POS Kasir</strong></p>
                       </div>
                     ))}
                   </div>

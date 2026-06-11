@@ -1,47 +1,88 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:wght@700;800&display=swap');
 
 :root {
-  /* Coffee Theme Colors */
-  --coffee-dark: #3a2618;
-  --coffee-main: #5c3d2e;
-  --coffee-light: #8a5a44;
-  --coffee-latte: #d4a373;
-  --coffee-cream: #faedcd;
-  --coffee-milk: #fefae0;
-  
-  --bg-main: #faf9f6;
-  --bg-surface: #ffffff;
-  
-  --text-main: #2b1f1a;
-  --text-muted: #736158;
-  
+  /* ── Coffee Color Palette ── */
+  --coffee-espresso: #1a0e06;
+  --coffee-dark:     #2b1a0e;
+  --coffee-main:     #5c3d2e;
+  --coffee-medium:   #7c5141;
+  --coffee-light:    #a07060;
+  --coffee-latte:    #c9956a;
+  --coffee-caramel:  #d4a574;
+  --coffee-cream:    #f5e6d3;
+  --coffee-milk:     #fdf6ed;
+  --coffee-fog:      #faf5ef;
+
+  /* ── Background System ── */
+  --bg-app:        #f7f2ec;
+  --bg-main:       #faf7f4;
+  --bg-surface:    #ffffff;
+  --bg-elevated:   #fffcf9;
+  --bg-admin:      #1e1409;
+  --bg-admin-card: #2a1c0f;
+  --bg-admin-side: #160d04;
+
+  /* ── Text ── */
+  --text-main:    #1e130a;
+  --text-body:    #3d2b1f;
+  --text-muted:   #7a5c48;
+  --text-faint:   #b89a86;
+  --text-on-dark: #f5e6d3;
+  --text-on-dark-muted: #c4a98e;
+
+  /* ── Semantic Colors ── */
   --accent-success: #2d6a4f;
-  --accent-warning: #e76f51;
-  --accent-danger: #d62828;
-  --accent-info: #118ab2;
+  --accent-success-bg: #edf7f2;
+  --accent-warning: #c76b2a;
+  --accent-warning-bg: #fef3e8;
+  --accent-danger:  #c0392b;
+  --accent-danger-bg: #fdecea;
+  --accent-info:    #1a6fa8;
+  --accent-info-bg: #e8f3fb;
+  --accent-gold:    #b8860b;
+  --accent-gold-bg: #fefbe8;
 
-  --shadow-sm: 0 2px 8px rgba(92, 61, 46, 0.05);
-  --shadow-md: 0 4px 16px rgba(92, 61, 46, 0.1);
-  --shadow-lg: 0 10px 30px rgba(92, 61, 46, 0.15);
-  --shadow-hover: 0 15px 35px rgba(92, 61, 46, 0.2);
+  /* ── Shadows ── */
+  --shadow-xs:    0 1px 3px rgba(42,28,15,0.06);
+  --shadow-sm:    0 2px 8px rgba(42,28,15,0.08);
+  --shadow-md:    0 6px 20px rgba(42,28,15,0.12);
+  --shadow-lg:    0 12px 40px rgba(42,28,15,0.18);
+  --shadow-xl:    0 24px 64px rgba(42,28,15,0.24);
+  --shadow-glow:  0 0 30px rgba(92,61,46,0.25);
 
-  --radius-sm: 8px;
-  --radius-md: 16px;
-  --radius-lg: 24px;
+  /* ── Border Radius ── */
+  --radius-xs:   4px;
+  --radius-sm:   8px;
+  --radius-md:   14px;
+  --radius-lg:   20px;
+  --radius-xl:   28px;
   --radius-pill: 9999px;
 
-  --font-main: 'Outfit', system-ui, -apple-system, sans-serif;
-  --transition-fast: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-normal: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  /* ── Typography ── */
+  --font-main:    'Inter', system-ui, -apple-system, sans-serif;
+  --font-display: 'Playfair Display', Georgia, serif;
+
+  /* ── Motion ── */
+  --ease-out:   cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in:    cubic-bezier(0.4, 0, 1, 1);
+  --ease-inout: cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-fast:   0.15s var(--ease-out);
+  --transition-normal: 0.28s var(--ease-out);
+  --transition-slow:   0.45s var(--ease-out);
 }
+
+/* ── Reset & Base ── */
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
 
 body {
   margin: 0;
   font-family: var(--font-main);
-  background-color: var(--bg-main);
+  background-color: var(--bg-app);
   color: var(--text-main);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  line-height: 1.6;
 }
 
 #root {
@@ -55,14 +96,24 @@ body {
 
 h1, h2, h3, h4, h5, h6 {
   margin: 0;
-  font-weight: 600;
-  color: var(--coffee-dark);
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1.3;
 }
 
-p {
-  margin: 0;
-}
+p { margin: 0; }
 
-* {
-  box-sizing: border-box;
+a { text-decoration: none; color: inherit; }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--coffee-cream); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--coffee-latte); }
+
+/* ── Focus Visible ── */
+:focus-visible {
+  outline: 2px solid var(--coffee-latte);
+  outline-offset: 3px;
+  border-radius: var(--radius-xs);
 }
