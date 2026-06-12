@@ -236,7 +236,13 @@ app.get('/api/categories', async (req, res) => { try { res.json(await prisma.cat
 
 app.get('/api/menu', async (req, res) => { 
   try {
-      const menus = await prisma.menu_items.findMany({ where: { status: 'ready' }, include: { categories: true } });
+      const menus = await prisma.menu_items.findMany({ 
+          where: { status: 'ready' }, 
+          include: { 
+              categories: true,
+              recipe_bom: { include: { raw_materials: true } }
+          } 
+      });
       const activePromos = await prisma.promotions.findMany({ where: { is_active: true, end_date: { gt: new Date() } } });
 
       const menusWithPromos = menus.map(m => {
@@ -247,7 +253,17 @@ app.get('/api/menu', async (req, res) => {
           else currentPrice -= Number(promo.value);
           if (currentPrice < 0) currentPrice = 0;
         }
-        return { ...m, original_price: Number(m.price), price: currentPrice, promo_info: promo };
+
+        let isHabis = false;
+        if (m.recipe_bom && m.recipe_bom.length > 0) {
+           for (const resep of m.recipe_bom) {
+              if (Number(resep.raw_materials.current_stock) < Number(resep.quantity_required)) {
+                  isHabis = true; break;
+              }
+           }
+        }
+        const { recipe_bom, ...menuData } = m; // remove heavy relation data
+        return { ...menuData, original_price: Number(m.price), price: currentPrice, promo_info: promo, is_out_of_stock: isHabis };
       });
       res.json(menusWithPromos); 
   } catch (error) { res.status(400).json({ error: error.message }); }
@@ -513,8 +529,13 @@ app.get('/api/admin/inventory-history', async (req, res) => { try { res.json(awa
 
 app.get('/api/admin/promotions', async (req, res) => { try { res.json(await prisma.promotions.findMany({ include: { menu_items: true }, orderBy: { end_date: 'desc' } })); } catch (error) { res.status(400).json({ error: error.message }); } });
 app.post('/api/admin/promotions', async (req, res) => {
-  const { menu_item_id, name, type, value, end_date } = req.body;
-  try { const newPromo = await prisma.promotions.create({ data: { menu_item_id: parseInt(menu_item_id), name: name, type: type, value: parseFloat(value), end_date: new Date(end_date), is_active: true } }); res.json({ message: "Diskon berhasil ditambahkan!", data: newPromo }); } catch (error) { res.status(400).json({ error: error.message }); }
+  const { menu_item_ids, name, type, value, end_date } = req.body;
+  try { 
+    if (!menu_item_ids || !Array.isArray(menu_item_ids)) throw new Error("menu_item_ids harus array!");
+    const promosData = menu_item_ids.map(id => ({ menu_item_id: parseInt(id), name: name, type: type, value: parseFloat(value), end_date: new Date(end_date), is_active: true }));
+    const result = await prisma.promotions.createMany({ data: promosData }); 
+    res.json({ message: `Diskon berhasil ditambahkan ke ${result.count} menu!` }); 
+  } catch (error) { res.status(400).json({ error: error.message }); }
 });
 app.delete('/api/admin/promotions/:id', async (req, res) => { try { await prisma.promotions.delete({ where: { id: parseInt(req.params.id) } }); res.json({ message: "Diskon dihapus!" }); } catch (error) { res.status(400).json({ error: error.message }); } });
 

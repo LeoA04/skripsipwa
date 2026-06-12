@@ -11,14 +11,20 @@ const playNotificationSound = () => {
 };
 // 1. DASHBOARD PWA PELANGGAN
 function CustomerApp() {
-  const [menus, setMenus] = useState([]); const [filteredMenus, setFilteredMenus] = useState([]); const [categoriesList, setCategoriesList] = useState(['Semua']); const [cart, setCart] = useState([]); const [category, setCategory] = useState('Semua'); const [isCartOpen, setIsCartOpen] = useState(false); const [checkoutSuccess, setCheckoutSuccess] = useState(false); const [nomorMeja, setNomorMeja] = useState(1);
+  const [menus, setMenus] = useState([]); const [filteredMenus, setFilteredMenus] = useState([]); const [categoriesList, setCategoriesList] = useState(['Semua']); const [cart, setCart] = useState([]); const [category, setCategory] = useState('Semua'); const [searchQuery, setSearchQuery] = useState(''); const [isCartOpen, setIsCartOpen] = useState(false); const [checkoutSuccess, setCheckoutSuccess] = useState(false); const [nomorMeja, setNomorMeja] = useState(1);
   const [lastOrderItems, setLastOrderItems] = useState([]); const [lastOrderId, setLastOrderId] = useState(null); const [feedbackData, setFeedbackData] = useState({});
   useEffect(() => {
     const params = new URLSearchParams(window.location.search); const mejaDariUrl = params.get('meja'); if (mejaDariUrl) setNomorMeja(parseInt(mejaDariUrl));
     axios.get(`${API_URL}/api/categories`).then(res => setCategoriesList(['Semua', ...res.data.map(c => c.name)])).catch(err => console.log(err));
-    axios.get(`${API_URL}/api/menu`).then(res => { setMenus(res.data); setFilteredMenus(res.data); }).catch(err => console.log(err));
+    axios.get(`${API_URL}/api/menu`).then(res => setMenus(res.data)).catch(err => console.log(err));
   }, []);
-  const filterCategory = (cat) => { setCategory(cat); setFilteredMenus(cat === 'Semua' ? menus : menus.filter(m => m.categories?.name === cat)); }
+  useEffect(() => {
+    let result = menus;
+    if (category !== 'Semua') result = result.filter(m => m.categories?.name === category);
+    if (searchQuery.trim() !== '') result = result.filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase()));
+    setFilteredMenus(result);
+  }, [menus, category, searchQuery]);
+  const filterCategory = (cat) => setCategory(cat);
   const updateQuantity = (item, qtyDelta) => { const existing = cart.find(c => c.id === item.id); if (existing) { const newQty = existing.qty + qtyDelta; setCart(newQty <= 0 ? cart.filter(c => c.id !== item.id) : cart.map(c => c.id === item.id ? { ...c, qty: newQty } : c)); } else if (qtyDelta > 0) setCart([...cart, { ...item, qty: 1, notes: '' }]); }
   const updateItemNote = (itemId, note) => setCart(cart.map(c => c.id === itemId ? { ...c, notes: note } : c));
   const getItemQuantity = (itemId) => { const item = cart.find(c => c.id === itemId); return item ? item.qty : 0; }
@@ -54,10 +60,42 @@ function CustomerApp() {
     )
   }
   return (
-    <div className="app-container"><header className="header"><div style={{ display: 'flex', alignItems: 'center', gap: '10px', justifyContent: 'center' }}><img src={rcmLogo} alt="Raya Cafe Logo" style={{ height: '48px', width: '48px', objectFit: 'contain', borderRadius: '50%', boxShadow: '0 2px 8px rgba(0,0,0,0.18)' }} /><div><h1>Raya Cafe Madiun</h1><p>Self-Order Meja {nomorMeja}</p></div></div><div className="category-tabs">{categoriesList.map(cat => <button key={cat} className={category === cat ? 'active-tab' : 'tab'} onClick={() => filterCategory(cat)}>{cat}</button>)}</div></header>
+    <div className="app-container">
+      <header className="header">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', justifyContent: 'center' }}>
+          <img src={rcmLogo} alt="Raya Cafe Logo" style={{ height: '48px', width: '48px', objectFit: 'contain', borderRadius: '50%', boxShadow: '0 2px 8px rgba(0,0,0,0.18)' }} />
+          <div><h1>Raya Cafe Madiun</h1><p>Self-Order Meja {nomorMeja}</p></div>
+        </div>
+        <div className="search-container" style={{ marginTop: '18px', padding: '0 20px', maxWidth: '600px', margin: '18px auto 0' }}>
+          <input type="text" placeholder="🔍 Cari minuman, makanan, snack..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="search-input-pwa" />
+        </div>
+        <div className="category-tabs" style={{ marginTop: '16px' }}>
+          {categoriesList.map(cat => <button key={cat} className={category === cat ? 'active-tab' : 'tab'} onClick={() => filterCategory(cat)}>{cat}</button>)}
+        </div>
+      </header>
       <div className="menu-grid">{filteredMenus.map(menu => {
         const qtyInCart = getItemQuantity(menu.id); const isDiscounted = menu.original_price > menu.price;
-        return (<div key={menu.id} className="menu-card"><div style={{ display: 'flex', justifyContent: 'space-between' }}><span className="badge">{menu.categories?.name || 'Menu'}</span>{isDiscounted && <span className="badge-promo">Diskon!</span>}</div><h3>{menu.name}</h3><p className="description">{menu.description}</p><div className="card-footer-row"><div className="price-container">{isDiscounted && <p className="original-price">Rp {menu.original_price.toLocaleString('id-ID')}</p>}<p className="price">Rp {menu.price.toLocaleString('id-ID')}</p></div>{qtyInCart > 0 ? (<div className="qty-control-btn"><button onClick={() => updateQuantity(menu, -1)}>−</button><span>{qtyInCart}</span><button onClick={() => updateQuantity(menu, 1)}>+</button></div>) : <button className="add-btn" onClick={() => updateQuantity(menu, 1)}>Tambah</button>}</div></div>);
+        const isHabis = menu.is_out_of_stock;
+        return (
+          <div key={menu.id} className={`menu-card ${isHabis ? 'out-of-stock-card' : ''}`}>
+             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+               <span className="badge">{menu.categories?.name || 'Menu'}</span>
+               {isDiscounted && !isHabis && <span className="badge-promo">Diskon!</span>}
+               {isHabis && <span className="badge-habis">HABIS</span>}
+             </div>
+             <h3>{menu.name}</h3>
+             <p className="description">{menu.description}</p>
+             <div className="card-footer-row">
+               <div className="price-container">
+                 {isDiscounted && <p className="original-price">Rp {menu.original_price.toLocaleString('id-ID')}</p>}
+                 <p className="price">Rp {menu.price.toLocaleString('id-ID')}</p>
+               </div>
+               {!isHabis && (
+                 qtyInCart > 0 ? (<div className="qty-control-btn"><button onClick={() => updateQuantity(menu, -1)}>−</button><span>{qtyInCart}</span><button onClick={() => updateQuantity(menu, 1)}>+</button></div>) : <button className="add-btn" onClick={() => updateQuantity(menu, 1)}>Tambah</button>
+               )}
+             </div>
+           </div>
+        );
       })}</div>
       {totalItems > 0 && (<div className="cart-footer"><div className="cart-info"><span>{totalItems} Item</span><strong>Rp {finalTotal.toLocaleString('id-ID')}</strong></div><button className="checkout-btn" onClick={() => setIsCartOpen(true)}>Buka Keranjang</button></div>)}
     </div>
@@ -86,10 +124,11 @@ function AdminDashboard() {
   const [showEventPreviewModal, setShowEventPreviewModal] = useState(false);
   const [invHistory, setInvHistory] = useState([]); const [showInvHistory, setShowInvHistory] = useState(false);
   const [showStockModal, setShowStockModal] = useState(false); const [selectedMaterial, setSelectedMaterial] = useState(null); const [newStockVal, setNewStockVal] = useState(''); const [stockReason, setStockReason] = useState('');
-  const [showPromoModal, setShowPromoModal] = useState(false); const [promoForm, setPromoForm] = useState({ menu_item_id: '', name: '', type: 'percent', value: '', end_date: '' });
+  const [showPromoModal, setShowPromoModal] = useState(false); const [promoForm, setPromoForm] = useState({ menu_item_ids: [], name: '', type: 'percent', value: '', end_date: '' });
   const [showUserModal, setShowUserModal] = useState(false); const [userForm, setUserForm] = useState({ username: '', password: '', role: 'kasir' });
   const prevOrderCount = useRef(0);
   const prevResvCount = useRef(0);
+  const prevLowStockCount = useRef(0);
   const handleLogin = (e) => {
     e.preventDefault();
     axios.post(`${API_URL}/api/login`, { username, password })
@@ -117,9 +156,17 @@ function AdminDashboard() {
     axios.get(`${API_URL}/api/menu`).then(res => setMenus(res.data)).catch(err => console.log(err));
     axios.get(`${API_URL}/api/packages`).then(res => setPackages(res.data)).catch(err => console.log(err));
     axios.get(`${API_URL}/api/tables`).then(res => setTables(res.data)).catch(err => console.log(err));
-    if (activeTab === 'inventory') {
-      axios.get(`${API_URL}/api/admin/inventory`).then(res => setInventory(res.data)).catch(err => console.log(err));
-      if (showInvHistory) axios.get(`${API_URL}/api/admin/inventory-history`).then(res => setInvHistory(res.data)).catch(err => console.log(err));
+    if (userRole === 'admin') {
+      axios.get(`${API_URL}/api/admin/inventory`).then(res => {
+        const newData = res.data;
+        const currentLowStock = newData.filter(item => item.current_stock <= item.min_stock_level).length;
+        if (currentLowStock > prevLowStockCount.current && prevLowStockCount.current !== 0) { playNotificationSound(); }
+        prevLowStockCount.current = currentLowStock;
+        setInventory(newData);
+      }).catch(err => console.log(err));
+      if (activeTab === 'inventory' && showInvHistory) {
+         axios.get(`${API_URL}/api/admin/inventory-history`).then(res => setInvHistory(res.data)).catch(err => console.log(err));
+      }
     }
     if (activeTab === 'promotions') axios.get(`${API_URL}/api/admin/promotions`).then(res => setPromotions(res.data)).catch(err => console.log(err));
     if (activeTab === 'feedback') axios.get(`${API_URL}/api/admin/feedback`).then(res => setFeedbacks(res.data)).catch(err => console.log(err));
@@ -226,8 +273,8 @@ function AdminDashboard() {
     axios.patch(`${API_URL}/api/admin/inventory/${selectedMaterial.id}`, { stock: newStockVal, reason: stockReason, updated_by: username }).then(() => { alert('Update sukses!'); setShowStockModal(false); fetchData(); }).catch(() => alert('Gagal!'));
   };
   const submitPromo = () => {
-    if (!promoForm.menu_item_id || !promoForm.value || !promoForm.end_date) return alert("Isi semua!");
-    axios.post(`${API_URL}/api/admin/promotions`, promoForm).then(() => { alert('Sukses!'); setShowPromoModal(false); fetchData(); });
+    if (promoForm.menu_item_ids.length === 0 || !promoForm.value || !promoForm.end_date) return alert("Pilih minimal 1 menu dan isi semua data!");
+    axios.post(`${API_URL}/api/admin/promotions`, promoForm).then(() => { alert('Sukses!'); setShowPromoModal(false); setPromoForm({ menu_item_ids: [], name: '', type: 'percent', value: '', end_date: '' }); fetchData(); });
   };
   const deletePromo = (id) => { if (window.confirm("Hapus diskon?")) axios.delete(`${API_URL}/api/admin/promotions/${id}`).then(() => fetchData()); };
   const submitUser = () => {
@@ -258,6 +305,9 @@ function AdminDashboard() {
     if (!posTable || posCart.length === 0) return alert("Pilih meja dan menu!");
     axios.post(`${API_URL}/api/checkout`, { table_id: posTable, items: posCart.map(i => ({ menu_item_id: i.id, quantity: i.qty })) }).then(() => { alert("Pesanan Kasir masuk!"); setPosCart([]); setPosTable(''); fetchData(); setActiveTab('orders'); });
   }
+
+  const lowStockCount = inventory.filter(i => i.current_stock <= i.min_stock_level).length;
+
   if (!isAuthenticated) return (
     <div className="login-container">
       <div className="login-box">
@@ -536,7 +586,20 @@ function AdminDashboard() {
       {/* MODAL STOK OPNAME */}
       {showStockModal && (<div className="modal-overlay"><div className="modal-content"><h3>Update Stok: {selectedMaterial?.name}</h3><div className="modal-form"><input type="number" value={newStockVal} onChange={(e) => setNewStockVal(e.target.value)} /><input type="text" placeholder="Alasan (Contoh: Tumpah, Basi)..." value={stockReason} onChange={(e) => setStockReason(e.target.value)} required /><div className="modal-actions"><button className="btn-secondary" onClick={() => setShowStockModal(false)}>Batal</button><button className="btn-process" onClick={submitStockUpdate}>Simpan</button></div></div></div></div>)}
       {/* MODAL PROMO */}
-      {showPromoModal && (<div className="modal-overlay"><div className="modal-content"><h3>Tambah Diskon</h3><div className="modal-form"><select value={promoForm.menu_item_id} onChange={(e) => setPromoForm({ ...promoForm, menu_item_id: e.target.value })}><option value="">-- Menu --</option>{menus.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select><input type="text" placeholder="Nama Diskon" value={promoForm.name} onChange={(e) => setPromoForm({ ...promoForm, name: e.target.value })} /><select value={promoForm.type} onChange={(e) => setPromoForm({ ...promoForm, type: e.target.value })}><option value="percent">Persen (%)</option><option value="nominal">Rupiah (Rp)</option></select><input type="number" placeholder="Nilai" value={promoForm.value} onChange={(e) => setPromoForm({ ...promoForm, value: e.target.value })} /><input type="datetime-local" value={promoForm.end_date} onChange={(e) => setPromoForm({ ...promoForm, end_date: e.target.value })} /><div className="modal-actions"><button className="btn-secondary" onClick={() => setShowPromoModal(false)}>Batal</button><button className="btn-ready" onClick={submitPromo}>Simpan</button></div></div></div></div>)}
+      {showPromoModal && (<div className="modal-overlay"><div className="modal-content"><h3>Tambah Diskon</h3><div className="modal-form">
+      <div style={{maxHeight: '160px', overflowY: 'auto', border: '1px solid #ccc', padding: '10px', borderRadius: '5px', background: '#fff', marginBottom: '10px'}}>
+        <div style={{fontWeight: 'bold', fontSize: '0.85rem', marginBottom: '8px', borderBottom: '1px solid #eee', paddingBottom: '4px'}}>Pilih Menu (Bisa Lebih Dari Satu)</div>
+        {menus.map(m => (
+          <label key={m.id} style={{display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0', cursor: 'pointer'}}>
+            <input type="checkbox" value={m.id} checked={promoForm.menu_item_ids.includes(m.id.toString())} onChange={(e) => {
+              const checked = e.target.checked; const val = e.target.value;
+              setPromoForm(prev => ({ ...prev, menu_item_ids: checked ? [...prev.menu_item_ids, val] : prev.menu_item_ids.filter(id => id !== val) }));
+            }} style={{width: 'auto', margin: 0}} />
+            <span style={{fontSize:'0.88rem'}}>{m.name}</span>
+          </label>
+        ))}
+      </div>
+      <input type="text" placeholder="Nama Diskon" value={promoForm.name} onChange={(e) => setPromoForm({ ...promoForm, name: e.target.value })} /><select value={promoForm.type} onChange={(e) => setPromoForm({ ...promoForm, type: e.target.value })}><option value="percent">Persen (%)</option><option value="nominal">Rupiah (Rp)</option></select><input type="number" placeholder="Nilai" value={promoForm.value} onChange={(e) => setPromoForm({ ...promoForm, value: e.target.value })} /><input type="datetime-local" value={promoForm.end_date} onChange={(e) => setPromoForm({ ...promoForm, end_date: e.target.value })} /><div className="modal-actions"><button className="btn-secondary" onClick={() => setShowPromoModal(false)}>Batal</button><button className="btn-ready" onClick={submitPromo}>Simpan</button></div></div></div></div>)}
       {/* MODAL USERS */}
       {showUserModal && (<div className="modal-overlay"><div className="modal-content"><h3>Tambah Pegawai</h3><div className="modal-form"><input type="text" placeholder="Username" value={userForm.username} onChange={(e) => setUserForm({ ...userForm, username: e.target.value })} /><input type="password" placeholder="Password" value={userForm.password} onChange={(e) => setUserForm({ ...userForm, password: e.target.value })} /><select value={userForm.role} onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}><option value="kasir">Kasir</option><option value="admin">Admin / Manajer</option></select><div className="modal-actions"><button className="btn-secondary" onClick={() => setShowUserModal(false)}>Batal</button><button className="btn-ready" onClick={submitUser}>Simpan Akun</button></div></div></div></div>)}
       <header className="admin-header">
@@ -558,7 +621,12 @@ function AdminDashboard() {
         <button className={activeTab === 'reservations' ? 'adm-tab active' : 'adm-tab'} onClick={() => setActiveTab('reservations')}>📅 Reservasi</button>
         {userRole === 'admin' && (
           <>
-            <button className={activeTab === 'inventory' ? 'adm-tab active' : 'adm-tab'} onClick={() => setActiveTab('inventory')}>📦 Stok</button>
+            <button className={activeTab === 'inventory' ? 'adm-tab active' : 'adm-tab'} onClick={() => setActiveTab('inventory')} style={{ verticalAlign: 'top', padding: '6px 20px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                <span style={{ lineHeight: '1' }}>📦 Stok</span>
+                {lowStockCount > 0 && <span className="alert-badge" style={{ margin: 0, padding: '2px 6px', fontSize: '0.65rem', lineHeight: '1' }}>{lowStockCount} Peringatan</span>}
+              </div>
+            </button>
             <button className={activeTab === 'promotions' ? 'adm-tab active' : 'adm-tab'} onClick={() => setActiveTab('promotions')}>🎁 Diskon</button>
             <button className={activeTab === 'reports' ? 'adm-tab active' : 'adm-tab'} onClick={() => setActiveTab('reports')}>📊 Laporan</button>
             <button className={activeTab === 'feedback' ? 'adm-tab active' : 'adm-tab'} onClick={() => setActiveTab('feedback')}>⭐ Ulasan</button>
@@ -567,6 +635,17 @@ function AdminDashboard() {
         )}
       </div>
       <div className="admin-content">
+        {/* FLOATING TOAST NOTIFICATION */}
+        {lowStockCount > 0 && userRole === 'admin' && activeTab !== 'inventory' && (
+          <div style={{ position: 'fixed', bottom: '30px', right: '30px', background: 'linear-gradient(135deg, var(--accent-danger), #a93226)', color: 'white', padding: '16px 24px', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-xl)', zIndex: 9999, display: 'flex', alignItems: 'center', gap: '16px', animation: 'slideUp 0.3s var(--ease-out)', border: '1px solid rgba(255,255,255,0.2)' }}>
+             <span style={{ fontSize: '1.8rem' }}>⚠️</span>
+             <div>
+               <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: '800', letterSpacing: '0.2px' }}>Peringatan Stok!</h4>
+               <p style={{ margin: 0, fontSize: '0.85rem', opacity: 0.9 }}>Ada <strong>{lowStockCount} bahan baku</strong> yang stoknya menipis/habis.</p>
+             </div>
+             <button onClick={() => setActiveTab('inventory')} style={{ background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.3)', color: 'white', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontWeight: '800', fontSize: '0.85rem', transition: '0.2s' }}>Cek Stok</button>
+          </div>
+        )}
         {/* TAB: PWA ORDERS */}
         {activeTab === 'orders' && (
           <div className="order-grid">
@@ -861,8 +940,8 @@ function AdminDashboard() {
                   {inventory.map(item => (
                     <tr key={item.id} className={item.current_stock <= item.min_stock_level ? 'low-stock' : ''}>
                       <td>{item.name} {item.current_stock <= item.min_stock_level && <span className="alert-badge">⚠️ Stok Menipis</span>}</td>
-                      <td><strong>{item.current_stock}</strong></td>
-                      <td>{item.min_stock_level}</td>
+                      <td><strong>{item.current_stock}</strong> <span style={{fontSize: '0.85em', color: '#666', fontWeight: 'normal'}}>{item.unit || ''}</span></td>
+                      <td>{item.min_stock_level} <span style={{fontSize: '0.85em', color: '#666', fontWeight: 'normal'}}>{item.unit || ''}</span></td>
                       <td><button className="btn-update-stock" onClick={() => { setSelectedMaterial(item); setNewStockVal(item.current_stock); setStockReason(''); setShowStockModal(true); }}>Ubah Stok / Opname</button></td>
                     </tr>
                   ))}
@@ -879,7 +958,7 @@ function AdminDashboard() {
                       <td><strong>{hist.raw_materials?.name}</strong></td>
                       <td>
                         <span style={{ color: hist.new_stock > hist.old_stock ? 'green' : 'red', fontWeight: 'bold' }}>
-                          {hist.old_stock} ➔ {hist.new_stock}
+                          {hist.old_stock} ➔ {hist.new_stock} <span style={{fontSize: '0.85em', fontWeight: 'normal'}}>{hist.raw_materials?.unit || ''}</span>
                         </span>
                       </td>
                       <td style={{ fontStyle: 'italic' }}>{hist.reason}</td>
