@@ -1,8 +1,25 @@
 import { useState, useEffect, useRef } from "react";
 import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
 import axios from "axios";
+import Swal from "sweetalert2";
 import "./App.css";
 import rcmLogo from "./assets/rcm.png";
+
+// Override alert bawaan browser agar menggunakan SweetAlert2
+window.alert = (msg) => {
+  const message = String(msg);
+  const lowerMsg = message.toLowerCase();
+  const isError = lowerMsg.includes("gagal") || lowerMsg.includes("error") || lowerMsg.includes("salah") || lowerMsg.includes("wajib");
+  const isSuccess = lowerMsg.includes("sukses") || lowerMsg.includes("berhasil") || lowerMsg.includes("terima kasih") || lowerMsg.includes("masuk");
+  
+  let icon = "info";
+  let title = "Informasi";
+  if (isError) { icon = "error"; title = "Perhatian!"; }
+  else if (isSuccess) { icon = "success"; title = "Berhasil!"; }
+  
+  Swal.fire(title, message, icon);
+};
+
 // Menggunakan Environment Variable agar aman saat di-deploy (Vercel)
 const API_URL =
   import.meta.env.VITE_API_URL || `http://${window.location.hostname}:3000`;
@@ -76,25 +93,45 @@ function CustomerApp() {
     0,
   );
   const handleCheckout = () => {
-    axios
-      .post(`${API_URL}/api/checkout`, {
-        table_id: nomorMeja,
-        items: cart.map((item) => ({
-          menu_item_id: item.id,
-          quantity: item.qty,
-          notes: item.notes,
-        })),
-      })
-      .then((res) => {
-        setLastOrderId(res.data.data.id);
-        setLastOrderItems(cart);
-        setCart([]);
-        setIsCartOpen(false);
-        setCheckoutSuccess(true);
-      })
-      .catch((err) =>
-        alert("Gagal Checkout: " + (err.response?.data?.error || err.message)),
-      );
+    if (!nomorMeja || cart.length === 0) return alert("Pilih meja dan menu!");
+    
+    const taxCustomer = finalTotal * 0.10;
+    const serviceCustomer = finalTotal * 0.05;
+    const grandTotalCustomer = finalTotal + taxCustomer + serviceCustomer;
+
+    Swal.fire({
+      title: "Konfirmasi Pesanan",
+      html: `Subtotal: Rp ${finalTotal.toLocaleString("id-ID")}<br/>
+             Pajak (10%): Rp ${taxCustomer.toLocaleString("id-ID")}<br/>
+             Service (5%): Rp ${serviceCustomer.toLocaleString("id-ID")}<br/><br/>
+             <b>Total Akhir: Rp ${grandTotalCustomer.toLocaleString("id-ID")}</b>`,
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Pesan Sekarang",
+      cancelButtonText: "Batal",
+    }).then((result) => {
+      if (result.isConfirmed) {
+        axios
+          .post(`${API_URL}/api/checkout`, {
+            table_id: nomorMeja,
+            items: cart.map((item) => ({
+              menu_item_id: item.id,
+              quantity: item.qty,
+              notes: item.notes,
+            })),
+          })
+          .then((res) => {
+            setLastOrderId(res.data.data.id);
+            setLastOrderItems(cart);
+            setCart([]);
+            setIsCartOpen(false);
+            setCheckoutSuccess(true);
+          })
+          .catch((err) =>
+            alert("Gagal Checkout: " + (err.response?.data?.error || err.message)),
+          );
+      }
+    });
   };
   const submitFeedback = () => {
     const feedbacks = Object.keys(feedbackData).map((menuId) => ({
@@ -461,6 +498,7 @@ function AdminDashboard() {
   const [previewOrder, setPreviewOrder] = useState(null);
   const [showEventPreviewModal, setShowEventPreviewModal] = useState(false);
   const [invHistory, setInvHistory] = useState([]);
+  const [invRequests, setInvRequests] = useState([]);
   const [showInvHistory, setShowInvHistory] = useState(false);
   const [showStockModal, setShowStockModal] = useState(false);
   const [selectedMaterial, setSelectedMaterial] = useState(null);
@@ -498,11 +536,25 @@ function AdminDashboard() {
       .catch((err) => alert(err.response?.data?.error || "Gagal Login"));
   };
   const handleLogout = () => {
-    setIsAuthenticated(false);
-    setUsername("");
-    setPassword("");
-    setUserRole("");
-    localStorage.clear();
+    Swal.fire({
+      title: "Konfirmasi Logout",
+      text: "Apakah Anda yakin ingin keluar?",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#e67e22",
+      cancelButtonColor: "#d33",
+      confirmButtonText: "Ya, Keluar!",
+      cancelButtonText: "Batal"
+    }).then((result) => {
+      if (result.isConfirmed) {
+        setIsAuthenticated(false);
+        setUsername("");
+        setPassword("");
+        setUserRole("");
+        localStorage.clear();
+        Swal.fire("Berhasil", "Anda telah logout.", "success");
+      }
+    });
   };
   const fetchData = () => {
     if (!isAuthenticated) return;
@@ -546,7 +598,7 @@ function AdminDashboard() {
       .get(`${API_URL}/api/tables`)
       .then((res) => setTables(res.data))
       .catch((err) => console.log(err));
-    if (userRole === "admin") {
+    if (userRole === "admin" || userRole === "owner") {
       axios
         .get(`${API_URL}/api/admin/inventory`)
         .then((res) => {
@@ -564,11 +616,19 @@ function AdminDashboard() {
           setInventory(newData);
         })
         .catch((err) => console.log(err));
-      if (activeTab === "inventory" && showInvHistory) {
-        axios
-          .get(`${API_URL}/api/admin/inventory-history`)
-          .then((res) => setInvHistory(res.data))
-          .catch((err) => console.log(err));
+      if (activeTab === "inventory") {
+        if (showInvHistory) {
+          axios
+            .get(`${API_URL}/api/admin/inventory-history`)
+            .then((res) => setInvHistory(res.data))
+            .catch((err) => console.log(err));
+        }
+        if (userRole === "owner") {
+          axios
+            .get(`${API_URL}/api/admin/inventory-requests`)
+            .then((res) => setInvRequests(res.data))
+            .catch((err) => console.log(err));
+        }
       }
     }
     if (activeTab === "promotions")
@@ -586,7 +646,7 @@ function AdminDashboard() {
         .get(`${API_URL}/api/admin/users`)
         .then((res) => setUsersList(res.data))
         .catch((err) => console.log(err));
-    if (activeTab === "reports")
+    if (activeTab === "reports" || activeTab === "history")
       axios
         .get(`${API_URL}/api/admin/reports?date=${reportDate}`)
         .then((res) => setReportData(res.data))
@@ -607,19 +667,15 @@ function AdminDashboard() {
     setShowOrderPreviewModal(true);
   };
   const confirmOrderPrint = () => {
+    window.print();
+    setShowOrderPreviewModal(false);
+    setPreviewOrder(null);
     axios
       .post(`${API_URL}/api/admin/orders/${previewOrder.id}/print`, {
         kasir_name: username,
       })
-      .then((res) => {
-        alert(res.data.message);
-        setShowOrderPreviewModal(false);
-        setPreviewOrder(null);
-        fetchData();
-      })
-      .catch((err) =>
-        alert("Gagal cetak: " + (err.response?.data?.error || err.message)),
-      );
+      .then(() => fetchData())
+      .catch((err) => console.log("Gagal sync legacy:", err.message));
   };
   const submitEventConfirmation = () => {
     if (!selectedTableId) return alert("Pilih meja!");
@@ -666,21 +722,25 @@ function AdminDashboard() {
   };
   // 🔥 FUNGSI BARU: MENYELESAIKAN MEJA BIASA SECARA MANUAL 🔥
   const completeMejaBiasa = (id) => {
-    if (
-      window.confirm(
-        "Tamu sudah datang? Reservasi Meja ini akan ditandai selesai dan disembunyikan.",
-      )
-    ) {
-      axios
-        .patch(`${API_URL}/api/admin/reservations/${id}/status`, {
-          status: "completed",
-        })
-        .then((res) => {
-          alert("Reservasi selesai!");
-          fetchData();
-        })
-        .catch((err) => alert("Gagal menyelesaikan reservasi."));
-    }
+    Swal.fire({
+      title: "Konfirmasi Selesai",
+      text: "Tamu sudah datang? Reservasi Meja ini akan ditandai selesai dan disembunyikan.",
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Ya, Selesai!",
+    }).then((result) => {
+      if (result.isConfirmed) {
+        axios
+          .patch(`${API_URL}/api/admin/reservations/${id}/status`, {
+            status: "completed",
+          })
+          .then((res) => {
+            alert("Reservasi selesai!");
+            fetchData();
+          })
+          .catch((err) => alert("Gagal menyelesaikan reservasi."));
+      }
+    });
   };
   const submitManualResv = () => {
     if (
@@ -741,6 +801,10 @@ function AdminDashboard() {
     setShowEventPreviewModal(true);
   };
   const confirmEventPrint = () => {
+    window.print();
+    setShowEventPreviewModal(false);
+    setEventTotalAmount("");
+    
     // Hitung deskripsi event untuk dikirim ke legacy DB
     let eventDesc = "";
     if (selectedResv?.event_choice?.startsWith("paket_")) {
@@ -759,21 +823,15 @@ function AdminDashboard() {
         .filter(Boolean);
       eventDesc = items.join(", ");
     }
+    
     axios
       .post(`${API_URL}/api/admin/reservations/${selectedResv.id}/print`, {
         total_amount: eventTotalAmount,
         kasir_name: username,
         event_description: eventDesc,
       })
-      .then((res) => {
-        alert(res.data.message);
-        setShowEventPreviewModal(false);
-        setEventTotalAmount("");
-        fetchData();
-      })
-      .catch((err) =>
-        alert(err.response?.data?.error || "Gagal mengirim ke printer!"),
-      );
+      .then(() => fetchData())
+      .catch((err) => console.log("Gagal sync legacy:", err.message));
   };
   const submitStockUpdate = () => {
     if (!stockReason) return alert("Wajib diisi!");
@@ -782,13 +840,23 @@ function AdminDashboard() {
         stock: newStockVal,
         reason: stockReason,
         updated_by: username,
+        role: userRole,
       })
-      .then(() => {
-        alert("Update sukses!");
+      .then((res) => {
+        Swal.fire("Sukses", res.data.message, "success");
         setShowStockModal(false);
         fetchData();
       })
-      .catch(() => alert("Gagal!"));
+      .catch(() => Swal.fire("Gagal!", "Gagal update stok", "error"));
+  };
+  const handleStockRequest = (reqId, action) => {
+    axios
+      .patch(`${API_URL}/api/admin/inventory-requests/${reqId}`, { action })
+      .then((res) => {
+        Swal.fire("Sukses", res.data.message, "success");
+        fetchData();
+      })
+      .catch((err) => Swal.fire("Gagal", err.response?.data?.error || "Gagal memproses", "error"));
   };
   const submitPromo = () => {
     if (
@@ -811,10 +879,18 @@ function AdminDashboard() {
     });
   };
   const deletePromo = (id) => {
-    if (window.confirm("Hapus diskon?"))
-      axios
-        .delete(`${API_URL}/api/admin/promotions/${id}`)
-        .then(() => fetchData());
+    Swal.fire({
+      title: "Hapus diskon?",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Ya, Hapus",
+    }).then((result) => {
+      if (result.isConfirmed) {
+        axios
+          .delete(`${API_URL}/api/admin/promotions/${id}`)
+          .then(() => fetchData());
+      }
+    });
   };
   const submitUser = () => {
     if (!userForm.username || !userForm.password)
@@ -861,18 +937,36 @@ function AdminDashboard() {
   );
   const submitPosOrder = () => {
     if (!posTable || posCart.length === 0) return alert("Pilih meja dan menu!");
-    axios
-      .post(`${API_URL}/api/checkout`, {
-        table_id: posTable,
-        items: posCart.map((i) => ({ menu_item_id: i.id, quantity: i.qty })),
-      })
-      .then(() => {
-        alert("Pesanan Kasir masuk!");
-        setPosCart([]);
-        setPosTable("");
-        fetchData();
-        setActiveTab("orders");
-      });
+    const items = posCart.map((c) => ({ menu_item_id: c.id, quantity: c.qty }));
+    
+    const posTax = posTotal * 0.10;
+    const posService = posTotal * 0.05;
+    const posGrandTotal = posTotal + posTax + posService;
+
+    Swal.fire({
+      title: "Konfirmasi Pesanan Kasir",
+      html: `Subtotal: Rp ${posTotal.toLocaleString("id-ID")}<br/>
+             Pajak (10%): Rp ${posTax.toLocaleString("id-ID")}<br/>
+             Service (5%): Rp ${posService.toLocaleString("id-ID")}<br/><br/>
+             <b>Total Akhir: Rp ${posGrandTotal.toLocaleString("id-ID")}</b>`,
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Kirim Pesanan",
+      cancelButtonText: "Batal",
+    }).then((result) => {
+      if (result.isConfirmed) {
+        axios
+          .post(`${API_URL}/api/checkout`, { table_id: posTable, items })
+          .then(() => {
+            alert("Pesanan Kasir masuk!");
+            setPosCart([]);
+            setPosTable("");
+            fetchData();
+            setActiveTab("orders");
+          })
+          .catch((err) => alert(err.response?.data?.error || "Gagal"));
+      }
+    });
   };
 
   const lowStockCount = inventory.filter(
@@ -1185,20 +1279,10 @@ function AdminDashboard() {
                   marginBottom: "8px",
                 }}
               />
-              <h3
-                style={{ margin: 0, fontSize: "1.1rem", letterSpacing: "1px" }}
-              >
-                RAYA CAFE MADIUN
-              </h3>
-              <p
-                style={{
-                  margin: "2px 0 0",
-                  fontSize: "0.75rem",
-                  opacity: 0.85,
-                }}
-              >
-                Preview Nota — Belum Tercetak
-              </p>
+              <h3 style={{ margin: 0, fontSize: "1.2rem", letterSpacing: "1px", fontWeight: "800" }}>RAYA CAFE MADIUN</h3>
+              <p style={{ margin: "4px 0 0", fontSize: "0.75rem", opacity: 0.9 }}>Jl. Wuni Madiun No. 7, Madiun</p>
+              <p style={{ margin: "2px 0 8px", fontSize: "0.75rem", opacity: 0.9 }}>Telp: 0823-2826-5408</p>
+              <p style={{ margin: "0", fontSize: "0.75rem", opacity: 0.85, fontStyle: "italic" }}>Preview Nota — Belum Tercetak</p>
             </div>
             <div
               style={{
@@ -1207,6 +1291,9 @@ function AdminDashboard() {
                 fontFamily: "monospace",
               }}
             >
+              <div style={{ fontSize: "0.8rem", color: "#888", marginBottom: "8px", textAlign: "left" }}>
+                ID Nota: <strong style={{ color: "#333" }}>#RC-{previewOrder.id}</strong>
+              </div>
               <div
                 style={{
                   display: "flex",
@@ -1268,7 +1355,7 @@ function AdminDashboard() {
                     <span style={{ fontWeight: "bold" }}>
                       Rp{" "}
                       {(
-                        Number(item.menu_items?.price || 0) * item.quantity
+                        Number(item.price_at_order > 0 ? item.price_at_order : item.menu_items?.price || 0) * item.quantity
                       ).toLocaleString("id-ID")}
                     </span>
                   </div>
@@ -1307,6 +1394,18 @@ function AdminDashboard() {
                       "id-ID",
                     )}
                   </span>
+                </div>
+              )}
+              {Number(previewOrder.tax_amount) > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem", color: "#888", marginBottom: "4px" }}>
+                  <span>Pajak Restoran (10%)</span>
+                  <span>Rp {Number(previewOrder.tax_amount).toLocaleString("id-ID")}</span>
+                </div>
+              )}
+              {Number(previewOrder.service_amount) > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem", color: "#888", marginBottom: "4px" }}>
+                  <span>Service Charge (5%)</span>
+                  <span>Rp {Number(previewOrder.service_amount).toLocaleString("id-ID")}</span>
                 </div>
               )}
               <div
@@ -1403,20 +1502,10 @@ function AdminDashboard() {
                   marginBottom: "8px",
                 }}
               />
-              <h3
-                style={{ margin: 0, fontSize: "1.1rem", letterSpacing: "1px" }}
-              >
-                RAYA CAFE MADIUN
-              </h3>
-              <p
-                style={{
-                  margin: "2px 0 0",
-                  fontSize: "0.75rem",
-                  opacity: 0.85,
-                }}
-              >
-                Preview Nota Event — Belum Tercetak
-              </p>
+              <h3 style={{ margin: 0, fontSize: "1.2rem", letterSpacing: "1px", fontWeight: "800" }}>RAYA CAFE MADIUN</h3>
+              <p style={{ margin: "4px 0 0", fontSize: "0.75rem", opacity: 0.9 }}>Jl. Raya Madiun No. 123, Madiun</p>
+              <p style={{ margin: "2px 0 8px", fontSize: "0.75rem", opacity: 0.9 }}>Telp: 0812-3456-7890</p>
+              <p style={{ margin: "0", fontSize: "0.75rem", opacity: 0.85, fontStyle: "italic" }}>Preview Nota Event — Belum Tercetak</p>
             </div>
             <div
               style={{
@@ -1427,6 +1516,9 @@ function AdminDashboard() {
                 overflowY: "auto",
               }}
             >
+              <div style={{ fontSize: "0.8rem", color: "#888", marginBottom: "8px", textAlign: "left" }}>
+                ID Nota: <strong style={{ color: "#333" }}>#RC-{selectedResv.id}</strong>
+              </div>
               <div
                 style={{
                   display: "flex",
@@ -1835,7 +1927,7 @@ function AdminDashboard() {
                   Batal
                 </button>
                 <button className="btn-process" onClick={submitStockUpdate}>
-                  Simpan
+                  {userRole === "owner" ? "Simpan" : "Ajukan Update"}
                 </button>
               </div>
             </div>
@@ -1980,6 +2072,7 @@ function AdminDashboard() {
               >
                 <option value="kasir">Kasir</option>
                 <option value="admin">Admin / Manajer</option>
+                <option value="owner">Owner</option>
               </select>
               <div className="modal-actions">
                 <button
@@ -2046,12 +2139,14 @@ function AdminDashboard() {
         >
           🛎️ Live Orders
         </button>
-        <button
-          className={activeTab === "pos" ? "adm-tab active" : "adm-tab"}
-          onClick={() => setActiveTab("pos")}
-        >
-          🛒 POS Kasir
-        </button>
+        {userRole !== "owner" && (
+          <button
+            className={activeTab === "pos" ? "adm-tab active" : "adm-tab"}
+            onClick={() => setActiveTab("pos")}
+          >
+            🛒 POS Kasir
+          </button>
+        )}
         <button
           className={
             activeTab === "reservations" ? "adm-tab active" : "adm-tab"
@@ -2060,7 +2155,7 @@ function AdminDashboard() {
         >
           📅 Reservasi
         </button>
-        {userRole === "admin" && (
+        {(userRole === "admin" || userRole === "owner") && (
           <>
             <button
               className={
@@ -2093,6 +2188,10 @@ function AdminDashboard() {
                 )}
               </div>
             </button>
+          </>
+        )}
+        {userRole === "owner" && (
+          <>
             <button
               className={
                 activeTab === "promotions" ? "adm-tab active" : "adm-tab"
@@ -2107,19 +2206,29 @@ function AdminDashboard() {
             >
               📊 Laporan
             </button>
-            <button
-              className={
-                activeTab === "feedback" ? "adm-tab active" : "adm-tab"
-              }
-              onClick={() => setActiveTab("feedback")}
-            >
-              ⭐ Ulasan
-            </button>
+          </>
+        )}
+        <button
+          className={
+            activeTab === "feedback" ? "adm-tab active" : "adm-tab"
+          }
+          onClick={() => setActiveTab("feedback")}
+        >
+          ⭐ Ulasan
+        </button>
+        {userRole === "owner" && (
+          <>
             <button
               className={activeTab === "users" ? "adm-tab active" : "adm-tab"}
               onClick={() => setActiveTab("users")}
             >
               👥 Akun
+            </button>
+            <button
+              className={activeTab === "history" ? "adm-tab active" : "adm-tab"}
+              onClick={() => setActiveTab("history")}
+            >
+              🕒 Riwayat Order
             </button>
           </>
         )}
@@ -2608,7 +2717,7 @@ function AdminDashboard() {
             </div>
             <div className="order-grid">
               {reservations
-                .filter((resv) => resv.status !== "completed")
+                .filter((resv) => resv.status !== "completed" && resv.status !== "cancelled")
                 .map((resv) => (
                   <div
                     key={resv.id}
@@ -2685,29 +2794,53 @@ function AdminDashboard() {
                     </div>
                     <div className="order-card-actions">
                       {resv.status === "pending_wa" && (
-                        <button
-                          className="btn-ready"
-                          onClick={() => {
-                            setSelectedResv(resv);
-                            setEventCart([]);
-                            if (resv.event_choice?.startsWith("pilih")) {
-                              setEventMode("pilih");
-                              setSelectedPackageId("");
-                            } else {
-                              setEventMode("paket");
-                              if (resv.event_choice?.startsWith("paket_")) {
-                                setSelectedPackageId(
-                                  resv.event_choice.split("_")[1],
-                                );
-                              } else {
+                        <div style={{ display: "flex", flexDirection: "column", gap: "6px", width: "100%" }}>
+                          <button
+                            className="btn-ready"
+                            onClick={() => {
+                              setSelectedResv(resv);
+                              setEventCart([]);
+                              if (resv.event_choice?.startsWith("pilih")) {
+                                setEventMode("pilih");
                                 setSelectedPackageId("");
+                              } else {
+                                setEventMode("paket");
+                                if (resv.event_choice?.startsWith("paket_")) {
+                                  setSelectedPackageId(
+                                    resv.event_choice.split("_")[1],
+                                  );
+                                } else {
+                                  setSelectedPackageId("");
+                                }
                               }
-                            }
-                            setShowResvModal(true);
-                          }}
-                        >
-                          ✅ Konfirmasi &amp; Plot Meja
-                        </button>
+                              setShowResvModal(true);
+                            }}
+                          >
+                            ✅ Konfirmasi &amp; Plot Meja
+                          </button>
+                          <button
+                            className="btn-secondary"
+                            style={{ background: "#fee2e2", color: "#991b1b", border: "1px solid #fca5a5" }}
+                            onClick={() => {
+                              Swal.fire({
+                                title: "Batalkan Reservasi?",
+                                text: "Yakin ingin membatalkan reservasi ini?",
+                                icon: "warning",
+                                showCancelButton: true,
+                                confirmButtonText: "Ya, Batalkan",
+                              }).then((res) => {
+                                if (res.isConfirmed) {
+                                  axios
+                                    .patch(`${API_URL}/api/admin/reservations/${resv.id}/status`, { status: "cancelled" })
+                                    .then(() => alert("Reservasi Dibatalkan!"))
+                                    .catch(() => alert("Gagal membatalkan."));
+                                }
+                              });
+                            }}
+                          >
+                            ❌ Batalkan Reservasi
+                          </button>
+                        </div>
                       )}
                       {/* TOMBOL SELESAI AKTIF UNTUK EVENT DAN MEJA BIASA */}
                       {resv.status === "confirmed" &&
@@ -2761,7 +2894,7 @@ function AdminDashboard() {
           </div>
         )}
         {/* TAB: LAPORAN HARIAN (REPORTS) */}
-        {activeTab === "reports" && userRole === "admin" && (
+        {activeTab === "reports" && userRole === "owner" && (
           <div
             style={{ display: "flex", flexDirection: "column", gap: "24px" }}
           >
@@ -3416,7 +3549,7 @@ function AdminDashboard() {
           </div>
         )}
         {/* TAB: INVENTORY */}
-        {activeTab === "inventory" && userRole === "admin" && (
+        {activeTab === "inventory" && (userRole === "admin" || userRole === "owner") && (
           <div className="inventory-section">
             <div
               style={{
@@ -3569,10 +3702,55 @@ function AdminDashboard() {
                 </tbody>
               </table>
             )}
+            
+            {/* TABEL REQUEST STOK UNTUK OWNER */}
+            {userRole === "owner" && (
+              <div style={{ marginTop: "40px" }}>
+                <h2>Persetujuan Update Stok</h2>
+                <table className="inventory-table">
+                  <thead>
+                    <tr>
+                      <th>Waktu</th>
+                      <th>Bahan</th>
+                      <th>Perubahan Stok</th>
+                      <th>Alasan</th>
+                      <th>Diajukan Oleh</th>
+                      <th>Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {invRequests.length === 0 ? (
+                      <tr>
+                        <td colSpan="6" style={{ textAlign: "center" }}>
+                          Tidak ada pengajuan yang tertunda.
+                        </td>
+                      </tr>
+                    ) : null}
+                    {invRequests.map((req) => (
+                      <tr key={req.id}>
+                        <td>{new Date(req.created_at).toLocaleString("id-ID")}</td>
+                        <td><strong>{req.raw_materials?.name}</strong></td>
+                        <td>
+                          <span style={{ color: req.new_stock > req.old_stock ? "green" : "red", fontWeight: "bold" }}>
+                            {req.old_stock} ➔ {req.new_stock} <span style={{ fontSize: "0.85em", fontWeight: "normal" }}>{req.raw_materials?.unit || ""}</span>
+                          </span>
+                        </td>
+                        <td style={{ fontStyle: "italic" }}>{req.reason}</td>
+                        <td><span className="badge" style={{ background: "#3498db", color: "white", padding: "3px 8px", borderRadius: "10px" }}>{req.updated_by}</span></td>
+                        <td>
+                          <button className="btn-process" style={{ background: "#27ae60", padding: "4px 8px", fontSize: "0.8rem", marginRight: "6px" }} onClick={() => handleStockRequest(req.id, "approve")}>Setujui</button>
+                          <button className="btn-process" style={{ background: "#e74c3c", padding: "4px 8px", fontSize: "0.8rem" }} onClick={() => handleStockRequest(req.id, "reject")}>Tolak</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
         {/* TAB: PROMOTIONS */}
-        {activeTab === "promotions" && userRole === "admin" && (
+        {activeTab === "promotions" && userRole === "owner" && (
           <div className="inventory-section">
             <div
               style={{
@@ -3628,7 +3806,7 @@ function AdminDashboard() {
           </div>
         )}
         {/* TAB: FEEDBACK */}
-        {activeTab === "feedback" && userRole === "admin" && (
+        {activeTab === "feedback" && (
           <div className="inventory-section">
             <div
               style={{
@@ -3643,6 +3821,7 @@ function AdminDashboard() {
               <thead>
                 <tr>
                   <th>Waktu</th>
+                  <th>ID Order</th>
                   <th>Menu</th>
                   <th>Rating</th>
                   <th>Ulasan</th>
@@ -3659,6 +3838,7 @@ function AdminDashboard() {
                 {feedbacks.map((fb) => (
                   <tr key={fb.id}>
                     <td>{new Date(fb.created_at).toLocaleString("id-ID")}</td>
+                    <td><span style={{background: "#eee", padding: "2px 6px", borderRadius: "4px"}}>#RC-{fb.order_id}</span></td>
                     <td>
                       <strong>{fb.menu_items?.name}</strong>
                     </td>
@@ -3673,7 +3853,7 @@ function AdminDashboard() {
           </div>
         )}
         {/* TAB: USERS */}
-        {activeTab === "users" && userRole === "admin" && (
+        {activeTab === "users" && userRole === "owner" && (
           <div className="inventory-section">
             <div
               style={{
@@ -3716,16 +3896,23 @@ function AdminDashboard() {
                       {new Date(u.created_at).toLocaleDateString("id-ID")}
                     </td>
                     <td>
-                      {u.username !== username && (
+                      {u.username !== username && u.role !== "owner" && (
                         <button
                           className="btn-process"
                           style={{ backgroundColor: "#e74c3c" }}
                           onClick={() => {
-                            if (window.confirm("Hapus akun ini?")) {
-                              axios
-                                .delete(`${API_URL}/api/admin/users/${u.id}`)
-                                .then(() => fetchData());
-                            }
+                            Swal.fire({
+                              title: "Hapus akun ini?",
+                              icon: "warning",
+                              showCancelButton: true,
+                              confirmButtonText: "Ya, Hapus!",
+                            }).then((res) => {
+                              if (res.isConfirmed) {
+                                axios
+                                  .delete(`${API_URL}/api/admin/users/${u.id}`)
+                                  .then(() => fetchData());
+                              }
+                            });
                           }}
                         >
                           Hapus
@@ -3736,6 +3923,51 @@ function AdminDashboard() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+        {/* TAB: RIWAYAT ORDER HARI INI */}
+        {activeTab === "history" && userRole === "owner" && (
+          <div className="inventory-section">
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "20px" }}>
+              <h2>Riwayat Transaksi Hari Ini</h2>
+            </div>
+            <div style={{ overflowY: "auto", maxHeight: "600px", background: "white", borderRadius: "16px", padding: "20px", boxShadow: "0 4px 20px rgba(0,0,0,0.06)" }}>
+              {!reportData?.orders_detail || reportData.orders_detail.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "40px 0", color: "#ccc" }}>
+                  <div style={{ fontSize: "3rem", marginBottom: "12px" }}>📭</div>
+                  <p>Tidak ada transaksi hari ini</p>
+                </div>
+              ) : (
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr style={{ background: "#f8f6f3" }}>
+                      <th style={{ padding: "10px 14px", textAlign: "left", fontSize: "0.78rem", color: "#888", fontWeight: "700", textTransform: "uppercase" }}>Order</th>
+                      <th style={{ padding: "10px 14px", textAlign: "left", fontSize: "0.78rem", color: "#888", fontWeight: "700", textTransform: "uppercase" }}>Meja</th>
+                      <th style={{ padding: "10px 14px", textAlign: "left", fontSize: "0.78rem", color: "#888", fontWeight: "700", textTransform: "uppercase" }}>Item</th>
+                      <th style={{ padding: "10px 14px", textAlign: "right", fontSize: "0.78rem", color: "#888", fontWeight: "700", textTransform: "uppercase" }}>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reportData.orders_detail.map((ord) => (
+                      <tr key={ord.id} style={{ borderBottom: "1px solid #f0ebe5" }}>
+                        <td style={{ padding: "12px 14px", fontSize: "0.82rem", color: "#555" }}>
+                          <span style={{ background: "#1a1a2e", color: "white", fontSize: "0.7rem", padding: "3px 8px", borderRadius: "6px", fontWeight: "700" }}>#{ord.id}</span>
+                        </td>
+                        <td style={{ padding: "12px 14px", fontSize: "0.85rem", fontWeight: "600", color: "#333" }}>Meja {ord.tables?.table_number || ord.table_id}</td>
+                        <td style={{ padding: "12px 14px", fontSize: "0.82rem", color: "#666", maxWidth: "200px" }}>
+                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>
+                            {ord.order_items?.map((i) => `${i.quantity}x ${i.menu_items?.name}`).join(", ") || "-"}
+                          </span>
+                        </td>
+                        <td style={{ padding: "12px 14px", textAlign: "right", fontWeight: "700", fontSize: "0.9rem", color: "#27ae60" }}>
+                          Rp {Number(ord.final_total).toLocaleString("id-ID")}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </div>
         )}
       </div>

@@ -24,22 +24,34 @@ const legacyDb = mysql.createPool({
 // AUTO AKUN
 setTimeout(async () => {
   try {
-    const userCount = await prisma.users.count();
-    if (userCount === 0) {
+    const adminExists = await prisma.users.findFirst({ where: { role: "admin" } });
+    if (!adminExists) {
       const hashAdmin = await bcrypt.hash("admin123", 10);
-      const hashKasir = await bcrypt.hash("kasir123", 10);
       await prisma.users.create({
         data: { username: "admin", password_hash: hashAdmin, role: "admin" },
       });
+      console.log("✅ Akun otomatis dibuat: [admin/admin123]");
+    }
+    
+    const kasirExists = await prisma.users.findFirst({ where: { role: "kasir" } });
+    if (!kasirExists) {
+      const hashKasir = await bcrypt.hash("kasir123", 10);
       await prisma.users.create({
         data: { username: "kasir", password_hash: hashKasir, role: "kasir" },
       });
-      console.log(
-        "✅ Akun otomatis dibuat: [admin/admin123] dan [kasir/kasir123]",
-      );
+      console.log("✅ Akun otomatis dibuat: [kasir/kasir123]");
+    }
+    
+    const ownerExists = await prisma.users.findFirst({ where: { role: "owner" } });
+    if (!ownerExists) {
+      const hashOwner = await bcrypt.hash("owner123", 10);
+      await prisma.users.create({
+        data: { username: "owner", password_hash: hashOwner, role: "owner" },
+      });
+      console.log("✅ Akun otomatis dibuat: [owner/owner123]");
     }
   } catch (err) {
-    console.log("⚠️ Pengecekan akun dilewati.");
+    console.log("⚠️ Pengecekan akun gagal: ", err.message);
   }
 }, 2000);
 
@@ -449,6 +461,8 @@ app.post("/api/checkout", async (req, res) => {
         if (firstTable) validTableId = firstTable.id;
       }
 
+      const itemsToCreate = [];
+
       for (const item of items) {
         const menu = await tx.menu_items.findUnique({
           where: { id: item.menu_item_id },
@@ -474,6 +488,13 @@ app.post("/api/checkout", async (req, res) => {
         subtotal_bayar += finalPrice * item.quantity;
         total_potongan += (basePrice - finalPrice) * item.quantity;
 
+        itemsToCreate.push({
+          menu_item_id: item.menu_item_id,
+          quantity: item.quantity,
+          price_at_order: basePrice,
+          notes: item.notes || "",
+        });
+
         for (const resep of menu.recipe_bom) {
           const kebutuhan = Number(resep.quantity_required) * item.quantity;
           if (Number(resep.raw_materials.current_stock) < kebutuhan)
@@ -484,19 +505,22 @@ app.post("/api/checkout", async (req, res) => {
           });
         }
       }
+
+      const taxAmount = (subtotal_bayar * 10) / 100;
+      const serviceAmount = (subtotal_bayar * 5) / 100;
+      const finalTotalWithTax = subtotal_bayar + taxAmount + serviceAmount;
+
       return await tx.orders.create({
         data: {
           table_id: validTableId,
           subtotal: total_asli,
           discount_amount: total_potongan,
-          final_total: subtotal_bayar,
+          tax_amount: taxAmount,
+          service_amount: serviceAmount,
+          final_total: finalTotalWithTax,
           status: "pending",
           order_items: {
-            create: items.map((i) => ({
-              menu_item_id: i.menu_item_id,
-              quantity: i.quantity,
-              notes: i.notes || "",
-            })),
+            create: itemsToCreate,
           },
         },
       });
@@ -905,28 +929,35 @@ app.get("/api/admin/inventory", async (req, res) => {
 });
 app.patch("/api/admin/inventory/:id", async (req, res) => {
   const materialId = parseInt(req.params.id);
-  const { stock, reason, updated_by } = req.body;
+  const { stock, reason, updated_by, role } = req.body;
   try {
     const result = await prisma.$transaction(async (tx) => {
       const material = await tx.raw_materials.findUnique({
         where: { id: materialId },
       });
-      const updated = await tx.raw_materials.update({
-        where: { id: materialId },
-        data: { current_stock: parseFloat(stock) },
-      });
-      await tx.inventory_history.create({
+      
+      const reqStatus = role === "owner" ? "approved" : "pending";
+      
+      if (reqStatus === "approved") {
+        await tx.raw_materials.update({
+          where: { id: materialId },
+          data: { current_stock: parseFloat(stock) },
+        });
+      }
+      
+      const history = await tx.inventory_history.create({
         data: {
           raw_material_id: materialId,
           old_stock: material.current_stock,
           new_stock: parseFloat(stock),
           reason: reason || "Manual",
+          status: reqStatus,
           updated_by: updated_by || "Admin",
         },
       });
-      return updated;
+      return history;
     });
-    res.json({ message: "Stok sukses diupdate!", data: result });
+    res.json({ message: role === "owner" ? "Stok sukses diupdate!" : "Pengajuan stok berhasil dikirim dan menunggu persetujuan Owner!", data: result });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
@@ -935,10 +966,59 @@ app.get("/api/admin/inventory-history", async (req, res) => {
   try {
     res.json(
       await prisma.inventory_history.findMany({
+        where: { status: "approved" },
         include: { raw_materials: true },
         orderBy: { created_at: "desc" },
       }),
     );
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.get("/api/admin/inventory-requests", async (req, res) => {
+  try {
+    res.json(
+      await prisma.inventory_history.findMany({
+        where: { status: "pending" },
+        include: { raw_materials: true },
+        orderBy: { created_at: "desc" },
+      }),
+    );
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.patch("/api/admin/inventory-requests/:id", async (req, res) => {
+  const reqId = parseInt(req.params.id);
+  const { action } = req.body; // "approve" or "reject"
+  try {
+    await prisma.$transaction(async (tx) => {
+      const request = await tx.inventory_history.findUnique({
+        where: { id: reqId },
+      });
+      if (!request || request.status !== "pending") {
+        throw new Error("Pengajuan tidak valid atau sudah diproses.");
+      }
+      
+      if (action === "approve") {
+        await tx.raw_materials.update({
+          where: { id: request.raw_material_id },
+          data: { current_stock: request.new_stock },
+        });
+        await tx.inventory_history.update({
+          where: { id: reqId },
+          data: { status: "approved" },
+        });
+      } else {
+        await tx.inventory_history.update({
+          where: { id: reqId },
+          data: { status: "rejected" },
+        });
+      }
+    });
+    res.json({ message: "Pengajuan berhasil diproses." });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }

@@ -998,3 +998,29 @@ body { font-family: var(--font-main); background-color: var(--bg-app); color: va
 }
 
 .fade-in { animation: fadeIn 0.4s var(--ease-out); }
+
+/* ================================================================
+   7. PRINT STYLES
+================================================================ */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .modal-content, .modal-content * {
+    visibility: visible;
+  }
+  .modal-content {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 10px;
+    box-shadow: none;
+    border: none;
+    background: white;
+  }
+  .modal-actions, .btn-process, .btn-secondary, .btn-ready, .btn-done {
+    display: none !important;
+  }
+}
