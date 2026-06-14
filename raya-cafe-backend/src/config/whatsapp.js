@@ -1,0 +1,13 @@
+const { Client, LocalAuth } = require("whatsapp-web.js");
+const qrcode = require("qrcode-terminal");
+
+const client = new Client({ authStrategy: new LocalAuth() });
+
+client.on("qr", (qr) => {
+  console.log("SCAN QR CODE INI DENGAN WHATSAPP ANDA:");
+  qrcode.generate(qr, { small: true });
+});
+
+client.on("ready", () => console.log("✅ WhatsApp Bot Raya Cafe sudah siap!"));
+
+module.exports = client;
